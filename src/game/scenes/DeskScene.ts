@@ -81,6 +81,7 @@ export class DeskScene extends Phaser.Scene {
   loadProgress() {
     const sh = this.sheets[this.idx];
     if (!sh) { this.vals = []; return; }
+    if (sh.game) { this.vals = sh.steps.map((st) => st.expect); return; } // game-solved: watch it work
     const saved = store.desk[sh.id];
     this.vals = saved && saved.key === this.key4(sh) ? saved.vals.slice() : sh.steps.map(() => null);
   }
@@ -143,6 +144,16 @@ export class DeskScene extends Phaser.Scene {
     this.loadProgress();
     this.render();
   }
+  /** Apply a sheet action to the build (e.g. set a stage's fuel) and recompute every sheet. */
+  act(a: { label: string; apply: (d: typeof store.design) => typeof store.design }) {
+    store.design = a.apply(store.design);
+    store.saveDesign();
+    this.stats = analyzeDesign(store.design);
+    this.sheets = buildSheets(store.design, this.stats);
+    this.loadProgress();
+    this.say(`Done: ${a.label.replace('USE THIS: ', '')}. Rocket now ${fmt(this.stats.spec!.rocket.dvTotal)} m/s.`, OK);
+    this.render();
+  }
   toHangar() { fadeTo(this, 'Hangar'); }
   launch() { fadeTo(this, 'Review'); }
 
@@ -157,30 +168,37 @@ export class DeskScene extends Phaser.Scene {
     for (const compact of [false, true]) {
       this.paper.removeAll(true);
       let y = 10;
-      const line = (s: string, color = INK, dx = 0) => { const t = txt(this, PX + dx, y, s, { color, maxWidth: PW - dx, shadow: false }); this.paper.add(t); y += t.height + 1; return t; };
+      // compact pass: anything that still runs past the paper is left off (never drawn off the sheet)
+      const line = (s: string, color = INK, dx = 0) => { const t = txt(this, PX + dx, y, s, { color, maxWidth: PW - dx, shadow: false }); if (compact && y + t.height > PBOTTOM) { t.destroy(); return t; } this.paper.add(t); y += t.height + 1; return t; };
       line(`SHEET ${sh.n}: ${sh.title}`, BLUE);
       if (!compact) line(sh.question);
       if (!compact) line(`Think of it like: ${sh.think}`, TEAL);
       line(sh.formula, BLUE);
       y += 2; line('YOUR NUMBERS:', INK);
       for (const gl of sh.given) line(`• ${gl}`, INK, 4);
-      y += 2;
+      y += 2; line(sh.game ? 'THE GAME WORKS IT OUT:' : 'FILL IN THE BLANKS:', INK);
       sh.steps.forEach((st, i) => {
         const v = this.vals[i];
         const shown = v === null ? (i === active ? '[ ? ]' : '[ ___ ]') : `${st.abs !== undefined ? v.toFixed(st.abs < 0.1 ? 3 : 2) : fmt(v)}${st.unit ? ' ' + st.unit : ''}`;
-        line(`${i === active ? '▶' : `${i + 1}.`} ${st.label} = ${shown}`, v === null ? (i === active ? BLUE : INK) : OK, 4);
+        line(`${i === active ? '▶' : `${i + 1}.`} ${st.label} = ${shown}`, v === null ? (i === active ? BLUE : INK) : sh.game ? INK : OK, 4);
       });
+      for (const e of sh.extra ?? []) line(e, e.startsWith('✓') ? OK : e.startsWith('×') ? RED : TEAL, 4);
       y += 2; line(`TARGET: ${sh.target}`, INK);
       if (active < 0) { const vd = sh.verdict(); line(`${vd.pass ? '✓' : '×'} ${vd.text}`, vd.pass ? OK : RED); if (this.easy && vd.pointer) line(`Change: ${vd.pointer}`, TEAL); }
       if (y <= PBOTTOM) break;
     }
     // side panel: sheet counter, feedback, Easy worked example
-    this.side.add(txt(this, 400, 8, `SHEET ${this.idx + 1} / ${this.sheets.length} · ${this.easy ? 'EASY' : 'HARD'}`, { align: 'center', color: C.gold }));
+    this.side.add(txt(this, 386, 8, `SHEET ${sh.n}/${this.sheets.length} · ${this.easy ? 'EASY' : 'HARD'}`, { align: 'center', color: C.gold })); // clear of the corner buttons
+    // sheet actions (sheet 7: Use this fuel)
+    const acts = sh.actions ?? [];
+    acts.forEach((a, k) => this.side.add(new Button(this, 328, 222 - (acts.length - k) * 17, a.label, () => this.act(a), { w: 144, h: 15, style: 'go', tooltip: 'Set this stage\'s fuel in your build' })));
+    const fbBottom = 222 - acts.length * 17 - 2;
     let fy = 149;
-    const fb = (s: string, color: number) => { const t = txt(this, 328, fy, s, { maxWidth: 144, color }); if (fy + t.height > 222) { t.destroy(); return; } this.side.add(t); fy += t.height + 2; };
+    const fb = (s: string, color: number) => { const t = txt(this, 328, fy, s, { maxWidth: 144, color }); if (fy + t.height > fbBottom) { t.destroy(); return; } this.side.add(t); fy += t.height + 2; };
     if (this.feedbackText) fb(this.feedbackText, this.feedbackColor === OK ? C.green : this.feedbackColor === RED ? C.red : C.text);
     if (this.easy && sh.example) fb(`Worked example: ${sh.example}`, C.teal);
-    if (active < 0) fb('Sheet done. Enter or NEXT to move on.', C.dim);
+    if (sh.game) fb('The game works this one out. Read along, then NEXT.', C.dim);
+    else if (active < 0) fb('Sheet done. Enter or NEXT to move on.', C.dim);
     this.feedback.setText('');
   }
 
