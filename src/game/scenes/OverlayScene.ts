@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, H, panel, txt, W } from '../ui/ui';
+import { Button, C, H, onceKey, panel, txt, W } from '../ui/ui';
+import { FORMULAS, partValues, PartValue } from '../../data/scienceLibrary';
 
 const GLOSSARY: [string, string][] = [
   ['Δv (delta-v)', 'Change in velocity a spacecraft can make. Every maneuver costs Δv; propellant buys it.'],
@@ -19,20 +20,28 @@ const GLOSSARY: [string, string][] = [
 export class OverlayScene extends Phaser.Scene {
   from = '';
   page: Phaser.GameObjects.Container | null = null;
+  libPage = 0;
+  inLibrary = false;
   constructor() { super('Overlay'); }
   init(d: { from: string }) { this.from = d.from; }
   create() {
     this.add.rectangle(0, 0, W, H, 0x04030c, 0.75).setOrigin(0, 0).setInteractive();
     panel(this, 20, 14, W - 40, H - 28, 'panel');
     txt(this, W / 2, 22, 'PAUSED', { align: 'center', color: C.gold, scale: 2 });
-    const tabs: [string, () => void][] = [['RESUME', () => this.close()], ['SETTINGS', () => this.settings()], ['HOW TO PLAY', () => this.help()], ['GLOSSARY', () => this.glossary()]];
+    const tabs: [string, () => void][] = [['RESUME', () => this.close()], ['SETTINGS', () => this.settings()], ['HOW TO PLAY', () => this.help()], ['GLOSSARY', () => this.glossary()], ['LIBRARY', () => { this.libPage = 0; this.library(); }]];
     tabs.forEach(([l, f], i) => new Button(this, 32, 50 + i * 22, l, f, { w: 96 }));
     const inMission = !['Title', 'Intro'].includes(this.from);
     if (inMission) {
-      new Button(this, 32, 50 + 4 * 22 + 8, 'BACK TO HANGAR', () => { if (store.mission) store.clearMission(); this.goto('Hangar'); }, { w: 96, tooltip: 'Abandon the current flight and edit your design.' });
+      new Button(this, 32, 50 + 5 * 22 + 8, 'BACK TO HANGAR', () => { if (store.mission) store.clearMission(); this.goto('Hangar'); }, { w: 96, tooltip: 'Abandon the current flight and edit your design.' });
     }
-    if (this.from !== 'Title') new Button(this, 32, 50 + 5 * 22 + 8, 'QUIT TO TITLE', () => this.goto('Title'), { w: 96, tooltip: 'Your mission auto-saves between phases.' });
+    if (this.from !== 'Title') new Button(this, 32, 50 + 6 * 22 + 8, 'QUIT TO TITLE', () => this.goto('Title'), { w: 96, tooltip: 'Your mission auto-saves between phases.' });
     this.input.keyboard?.on('keydown-ESC', () => this.close());
+    // science library paging: Left / Right (or PgUp / PgDn)
+    this.input.keyboard?.on('keydown', onceKey((e: KeyboardEvent) => {
+      if (!this.inLibrary) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') { this.libPage++; this.library(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { this.libPage--; this.library(); }
+    }));
     this.settings();
   }
   close() {
@@ -44,7 +53,7 @@ export class OverlayScene extends Phaser.Scene {
     this.scene.stop(this.from);
     this.scene.start(key);
   }
-  private clear() { this.page?.destroy(); this.page = this.add.container(140, 50); return this.page; }
+  private clear() { this.inLibrary = false; this.page?.destroy(); this.page = this.add.container(140, 50); return this.page; }
   settings() {
     const p = this.clear();
     const s = store.settings;
@@ -83,5 +92,62 @@ export class OverlayScene extends Phaser.Scene {
       y += 12 + t.height + 2;
       if (y > 175) break;
     }
+  }
+
+  /**
+   * Science library: every formula in plain words with its source (click the source to open it),
+   * then every part value with its R (real, sourced) / G (game choice) tag. Left / Right to page.
+   */
+  library() {
+    const p = this.clear();
+    this.inLibrary = true;
+    const pages = this.libraryPages();
+    this.libPage = ((this.libPage % pages.length) + pages.length) % pages.length;
+    pages[this.libPage](p);
+    p.add(txt(this, 0, 178, `${this.libPage + 1}/${pages.length}   Left / Right to turn the page`, { color: C.teal }));
+    p.add(new Button(this, 210, 174, '◀', () => { this.libPage--; this.library(); }, { w: 20 }));
+    p.add(new Button(this, 234, 174, '▶', () => { this.libPage++; this.library(); }, { w: 20 }));
+  }
+  private libraryPages(): ((p: Phaser.GameObjects.Container) => void)[] {
+    const out: ((p: Phaser.GameObjects.Container) => void)[] = [];
+    // formulas: one per page at 15 px (never shrink to fit)
+    const fpages: typeof FORMULAS[] = [];
+    for (const f of FORMULAS) fpages.push([f]);
+    fpages.forEach((fs) => out.push((p) => {
+      let y = 0;
+      for (const f of fs) {
+        const put = (s: string, color: number, size = 15) => { const t = txt(this, 0, y, s, { color, size, maxWidth: 296 }); p.add(t); y += t.height + 2; return t; };
+        put(f.name.toUpperCase(), C.gold2);
+        put(f.math, C.white);
+        put(f.words, 0xb8e6ff);
+        const src = put(`Source: ${f.source.label}`, f.source.url ? C.teal : C.text, 10);
+        if (f.source.url) { src.setInteractive({ useHandCursor: true }); src.on('pointerup', () => window.open(f.source.url, '_blank', 'noopener')); }
+        y += 6;
+      }
+    }));
+    // part values: grouped rows, paged by height (a group header repeats at the top of each page)
+    const rows = partValues();
+    const pv: PartValue[][] = [[]];
+    let h = 14, last = '';
+    for (const r of rows) {
+      const need = 12 + (r.group !== last ? 13 : 0);
+      if (h + need > 168) { pv.push([]); h = 14 + 13; } else h += need;
+      last = r.group;
+      pv[pv.length - 1].push(r);
+    }
+    pv.forEach((rs) => out.push((p) => {
+      p.add(txt(this, 0, 0, 'PART VALUES   R = real (sourced)   G = game choice', { color: C.gold2 }));
+      let y = 14, group = '';
+      for (const r of rs) {
+        if (r.group !== group) { group = r.group; p.add(txt(this, 0, y + 1, group.toUpperCase(), { color: C.gold })); y += 13; }
+        const t = txt(this, 6, y, `${r.part.replace(/ \(.*\)/, '')}: ${r.field}`, { color: C.white, maxWidth: 204 });
+        const v = txt(this, 262, y, r.value.toLocaleString('en-US'), { color: 0xffe14a, align: 'right' });
+        const tag = txt(this, 270, y, r.tag, { color: r.tag === 'R' ? C.green : C.orange });
+        p.add([t, v, tag]);
+        if (r.tag === 'R' && r.source.url) { t.setInteractive({ useHandCursor: true }); t.on('pointerup', () => window.open(r.source.url, '_blank', 'noopener')); }
+        y += 12;
+      }
+    }));
+    return out;
   }
 }
