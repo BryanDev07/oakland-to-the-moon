@@ -7,6 +7,7 @@ import { MAPCAM_MAP_TARGET_MB, NEUTRON_TARGET_H, SPEC_MODEL } from './constants'
 import { securedMB } from './mission';
 import { budgetForM } from './specModel';
 import { SCIENCE_TARGET_POINTS, SHIELD_ROUGH_RIDE_SAFETY } from '../data/specParts';
+import { scienceMult } from '../data/roles';
 import type { MissionState } from './types';
 
 export const WEIGHTS = { science: 0.3, crew: 0.3, engineering: 0.2, resources: 0.1, budget: 0.1 };
@@ -66,6 +67,11 @@ export function evaluate(s: MissionState): MissionReport {
   const landed = s.landing.outcome === 'soft' || s.landing.outcome === 'hard';
   const returned = !s.crewLost && s.phase === 'COMPLETE';
   const sci = scienceBreakdown(s);
+  const roleSci = SPEC_MODEL ? scienceMult(s.design.spec?.role) : 1; // Science & Comms Lead: +20%
+  if (roleSci !== 1) {
+    const base = sci.reduce((a, l) => a + l.points, 0);
+    sci.push({ id: 'role', label: 'Science & Comms Lead bonus (+20%)', points: base * (roleSci - 1), detail: '' });
+  }
   const sciencePoints = sci.reduce((a, l) => a + l.points, 0);
   const scienceScore = clamp01(sciencePoints / SCIENCE_FULL_POINTS) * (s.crewLost ? 0.3 : 1);
 

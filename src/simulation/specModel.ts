@@ -18,6 +18,7 @@ import { propellantForDv } from './rocket';
 import { ActiveRisk, analyzeRocket, assessRisks, maxPayloadKg, StackStats, tankRisk } from './stack';
 import type { BurnPlan, DesignStats, MassLine } from './spacecraft';
 import { lbToKg } from './units';
+import { budgetMult, PriceCat, priceMult, scienceMult, slotPriceCat } from '../data/roles';
 
 /** Slots whose job the capsule now does (engine, SM tanks, heat shield). Hidden, not deleted. */
 export const CAPSULE_OWNED_SLOTS = ['propulsion', 'tank', 'heatShield'];
@@ -45,7 +46,8 @@ export function orbitOf(d: Design): OrbitSpec {
 /** Budget in $M for the design's difficulty (spec tab 6 #15). */
 export function budgetForM(d: Design): number {
   if (!K.SPEC_MODEL) return K.BUDGET_M;
-  return BUDGETS_USD[specOf(d).difficulty].v / 1e6;
+  const sp = specOf(d);
+  return (BUDGETS_USD[sp.difficulty].v / 1e6) * budgetMult(sp.role); // Mission Commander: +5%
 }
 
 /** Speeds (m/s) for every burn after trans-lunar injection. */
@@ -114,17 +116,17 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
   const consumables = { o2Kg, waterKg, foodKg, totalKg: o2Kg + waterKg + foodKg };
 
   // ------------------------------------------------------------ small spec parts (docking, RCS, nav)
-  const small: { label: string; kg: number; w: number; usd: number }[] = [];
-  for (const id of sp.docking) { const p = DOCKING.find((x) => x.id === id); if (p) small.push({ label: p.name, kg: lbToKg(p.weightLb?.v ?? 0), w: p.powerW?.v ?? 0, usd: p.priceUsd.v }); }
+  const small: { label: string; kg: number; w: number; usd: number; cat?: PriceCat }[] = [];
+  for (const id of sp.docking) { const p = DOCKING.find((x) => x.id === id); if (p) small.push({ label: p.name, kg: lbToKg(p.weightLb?.v ?? 0), w: p.powerW?.v ?? 0, usd: p.priceUsd.v, cat: 'spacecraft' }); }
   const thr = THRUSTERS.find((t) => t.id === sp.thruster);
-  if (thr && sp.thrusterCount > 0) small.push({ label: `${sp.thrusterCount} x ${thr.name}`, kg: lbToKg(thr.weightLb?.v ?? 0) * sp.thrusterCount, w: 0, usd: thr.priceUsd.v * sp.thrusterCount });
+  if (thr && sp.thrusterCount > 0) small.push({ label: `${sp.thrusterCount} x ${thr.name}`, kg: lbToKg(thr.weightLb?.v ?? 0) * sp.thrusterCount, w: 0, usd: thr.priceUsd.v * sp.thrusterCount, cat: 'spacecraft' });
   const ttank = THRUSTER_TANKS.find((t) => t.id === sp.thrusterTank);
-  if (ttank) small.push({ label: ttank.name, kg: lbToKg(ttank.weightLb.v), w: 0, usd: ttank.priceUsd.v });
+  if (ttank) small.push({ label: ttank.name, kg: lbToKg(ttank.weightLb.v), w: 0, usd: ttank.priceUsd.v, cat: 'spacecraft' });
   for (const id of sp.nav) { const p = NAV.find((x) => x.id === id); if (p) small.push({ label: p.name, kg: lbToKg(p.weightLb?.v ?? 0), w: p.powerW?.v ?? 0, usd: p.priceUsd.v }); }
   // thruster fuel = tank gallons × density; every docking / rendezvous uses a fixed amount (G)
   const rcsFuelKg = ttank ? lbToKg(ttank.gallons.v * THRUSTER_FUEL_LB_PER_GAL.v) : 0;
   if (rcsFuelKg > 0) small.push({ label: 'Thruster fuel', kg: rcsFuelKg, w: 0, usd: 0 });
-  if (sp.fixes.includes('spareSeal')) small.push({ label: FIXES.spareSeal.name, kg: lbToKg(FIXES.spareSeal.weightLb!.v), w: 0, usd: FIXES.spareSeal.costUsd.v });
+  if (sp.fixes.includes('spareSeal')) small.push({ label: FIXES.spareSeal.name, kg: lbToKg(FIXES.spareSeal.weightLb!.v), w: 0, usd: FIXES.spareSeal.costUsd.v, cat: 'spacecraft' });
 
   // ------------------------------------------------------------ crew vehicle mass
   const capDryKg = lbToKg(cap.cmLb.v + cap.smLb.v - cap.smFuelLb.v);
@@ -161,15 +163,17 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
 
   // ------------------------------------------------------------ cost ($M; spec tab 6 #15)
   const nLaunch = launches.length;
+  // Role discounts / surcharges (spec tab 5) apply per price group.
+  const rm = (cat: PriceCat) => priceMult(sp.role, cat);
   const costLines = [
-    { label: cap.name, m: cap.priceUsd.v / 1e6, ids: [cap.id] as string[] },
-    { label: `${build.name} rocket${nLaunch > 1 ? ` x${nLaunch}` : ''}`, m: (rocket.costUsd * nLaunch) / 1e6, ids: [] as string[] },
+    { label: cap.name, m: (cap.priceUsd.v / 1e6) * rm('spacecraft'), ids: [cap.id] as string[] },
+    { label: `${build.name} rocket${nLaunch > 1 ? ` x${nLaunch}` : ''}`, m: ((rocket.costUsd * nLaunch) / 1e6) * rm('rocket'), ids: [] as string[] },
     { label: `Launch operations x${nLaunch}`, m: (LAUNCH_OPS_USD.v * nLaunch) / 1e6, ids: [] as string[] },
     { label: 'Crew supplies', m: (SUPPLIES_USD_PER_CREW_DAY.v * crew * missionDays) / 1e6, ids: [] as string[] },
-    ...parts.map((p) => ({ label: p.name, m: p.costM, ids: [p.id] })),
-    ...small.filter((x) => x.usd > 0).map((x) => ({ label: x.label, m: x.usd / 1e6, ids: [] as string[] })),
-    ...(packs ? [{ label: `${packs} x ${POWER_PARTS.liionPack.name} (lander)`, m: (packs * POWER_PARTS.liionPack.priceUsd.v) / 1e6, ids: [] as string[] }] : []),
-    ...(solarOn ? [{ label: POWER_PARTS.landerSolar.name, m: POWER_PARTS.landerSolar.priceUsd.v / 1e6, ids: [] as string[] }] : []),
+    ...parts.map((p) => ({ label: p.name, m: p.costM * rm(slotPriceCat(p.slot)), ids: [p.id] })),
+    ...small.filter((x) => x.usd > 0).map((x) => ({ label: x.label, m: (x.usd / 1e6) * rm(x.cat ?? 'other'), ids: [] as string[] })),
+    ...(packs ? [{ label: `${packs} x ${POWER_PARTS.liionPack.name} (lander)`, m: ((packs * POWER_PARTS.liionPack.priceUsd.v) / 1e6) * rm('spacecraft'), ids: [] as string[] }] : []),
+    ...(solarOn ? [{ label: POWER_PARTS.landerSolar.name, m: (POWER_PARTS.landerSolar.priceUsd.v / 1e6) * rm('spacecraft'), ids: [] as string[] }] : []),
     ...sp.fixes.filter((f) => f !== 'spareSeal').map((f) => ({ label: FIXES[f].name, m: FIXES[f].costUsd.v / 1e6, ids: [] as string[] })),
   ];
   const costM = costLines.reduce((s, l) => s + l.m, 0);
@@ -280,7 +284,8 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
         const orbital = p.id === 'sci_mapcam' ? 25 : p.id === 'sci_neutron' ? 10 * mult : 0;
         return { id: p.id, points: spec ? (lander ? spec.points.v * mult : 0) : orbital };
       });
-      return { plannedPoints: lines.reduce((a, l) => a + l.points, 0), target: SCIENCE_TARGET_POINTS.v, lines };
+      const roleMult = scienceMult(sp.role); // Science & Comms Lead: +20%
+      return { plannedPoints: lines.reduce((a, l) => a + l.points, 0) * roleMult, target: SCIENCE_TARGET_POINTS.v, lines };
     })(),
     padDelayDays: sp.fixes.includes('leakCheck') ? FIXES.leakCheck.padDays!.v : 0,
     budgetM: budgetForM(d),

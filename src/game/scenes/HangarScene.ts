@@ -349,7 +349,7 @@ export class HangarScene extends Phaser.Scene {
     modal(this, {
       title: fails.length ? `${fails.length} BLOCKING ISSUE${fails.length > 1 ? 'S' : ''}` : 'ENGINEERING HINT', text,
       options: [{ label: 'Keep building' }, { label: 'Load a proven reference design', detail: 'A known-good starting point you can modify.' }],
-      onChoose: (i) => { if (i === 1) this.change((d) => { const r = cloneDesign(REFERENCE_DESIGN); d.slots = r.slots; d.safety = r.safety; d.science = r.science; d.plan = r.plan; d.spec = r.spec; }, 'capsule'); },
+      onChoose: (i) => { if (i === 1) this.change((d) => { const r = cloneDesign(REFERENCE_DESIGN); d.slots = r.slots; d.safety = r.safety; d.science = r.science; d.plan = r.plan; d.spec = { ...r.spec, role: d.spec?.role ?? null, difficulty: d.spec?.difficulty ?? 'easy' }; }, 'capsule'); },
     });
   }
 
