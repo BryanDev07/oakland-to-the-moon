@@ -8,10 +8,12 @@ import { cloneDesign, Design, LAUNCH_VEHICLES, REFERENCE_DESIGN, SITES, TEMPOS, 
 import { reviewDesign, ReviewResult } from '../../simulation/review';
 import { analyzeDesign, DesignStats } from '../../simulation/spacecraft';
 import { BUDGET_M, G0, SPEC_MODEL } from '../../simulation/constants';
-import { CAPSULE_OWNED_SLOTS, missionDv } from '../../simulation/specModel';
-import { fmt, fmtUsdM, kgToLb } from '../../simulation/units';
+import { CAPSULE_OWNED_SLOTS, missionDv, specOf } from '../../simulation/specModel';
+import { CAPSULES, ORBITS, OrbitId, SpecDesign } from '../../data/specParts';
+import { ARCH_RUNDOWN, CAPSULE_RUNDOWN, ORBIT_RUNDOWN, STYLE_RUNDOWN } from '../../data/missionStyle';
+import { fmt, fmtUsd, fmtUsdM, kgToLb } from '../../simulation/units';
 
-type Cat = SlotId | 'plan';
+type Cat = SlotId | 'plan' | 'style';
 const FLOOR_Y = 209;
 
 export class HangarScene extends Phaser.Scene {
@@ -54,14 +56,14 @@ export class HangarScene extends Phaser.Scene {
     // left: categories
     panel(this, 2, 2, 104, 210, 'panel');
     txt(this, 54, 7, 'SYSTEMS', { align: 'center', color: C.gold });
-    const cats: { id: Cat; label: string; icon: string }[] = [{ id: 'plan', label: 'Mission Plan', icon: 'rocket' }, ...SLOTS.filter((s) => !(SPEC_MODEL && CAPSULE_OWNED_SLOTS.includes(s.id))).map((s) => ({ id: s.id as Cat, label: s.label, icon: s.icon }))];
+    const cats: { id: Cat; label: string; icon: string }[] = [{ id: 'plan', label: 'Mission Plan', icon: 'rocket' }, ...(SPEC_MODEL ? [{ id: 'style' as Cat, label: 'Mission Style', icon: 'earth' }] : []), ...SLOTS.filter((s) => !(SPEC_MODEL && CAPSULE_OWNED_SLOTS.includes(s.id))).map((s) => ({ id: s.id as Cat, label: s.label, icon: s.icon }))];
     cats.forEach((c, i) => {
       const y = 19 + i * 13.6;
       const bg = this.add.rectangle(6, y, 96, 13, 0x2a4c98, 0).setOrigin(0, 0).setInteractive({ useHandCursor: true });
       icon(this, 8, y + 0.5, c.icon);
       const label = txt(this, 22, y + 2, c.label, { color: C.text });
       const status = this.add.image(90, y + 0.5, 'icons', iconFrame('ok')).setOrigin(0, 0);
-      bg.on('pointerover', () => { bg.setFillStyle(0x2a4c98, 0.5); audio.sfx('move'); const s = SLOTS.find((x) => x.id === c.id); Tooltip.show(this, s ? s.help : 'Rocket, landing site, crew size, surface stay and operations tempo.', { x: 108, y }); });
+      bg.on('pointerover', () => { bg.setFillStyle(0x2a4c98, 0.5); audio.sfx('move'); const s = SLOTS.find((x) => x.id === c.id); Tooltip.show(this, c.id === 'style' ? 'Capsule, lunar orbit and architecture: Apollo-style or Artemis-style.' : s ? s.help : 'Rocket, landing site, crew size, surface stay and operations tempo.', { x: 108, y }); });
       bg.on('pointerout', () => { Tooltip.hide(); this.refresh(); });
       bg.on('pointerup', () => { audio.sfx('select'); this.selectCat(c.id); });
       this.catRows.push({ cat: c.id, bg, status, label });
@@ -192,6 +194,7 @@ export class HangarScene extends Phaser.Scene {
     for (const r of this.catRows) {
       let st: string = 'ok';
       if (r.cat === 'plan') st = planBad ? 'fail' : 'ok';
+      else if (r.cat === 'style') st = this.review.checks.some((c) => ['propulsion', 'capsule', 'shield', 'lander_dv'].includes(c.id) && c.status === 'fail') ? 'fail' : 'ok';
       else {
         const slot = SLOTS.find((x) => x.id === r.cat)!;
         const empty = !slot.multi && !this.design.slots[r.cat];
@@ -222,6 +225,7 @@ export class HangarScene extends Phaser.Scene {
     const R = this.right;
     const x0 = 326;
     if (this.cat === 'plan') { this.renderPlan(); return; }
+    if (this.cat === 'style') { this.renderStyle(); return; }
     const slot = SLOTS.find((s) => s.id === this.cat)!;
     R.add(txt(this, 400, 7, slot.label.toUpperCase(), { align: 'center', color: C.gold }));
     R.add(txt(this, x0 + 2, 18, slot.multi ? 'Choose any (click to toggle)' : 'Choose one', { color: C.dim }));
@@ -336,18 +340,61 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
         R.add(b);
       });
     };
-    row(19, 'LAUNCH VEHICLE', LAUNCH_VEHICLES.map((v) => ({ id: v.id, label: v.short.split(' ')[0].toUpperCase().slice(0, 7), tip: SPEC_MODEL ? `${v.name}: ${fmt(kgToLb(v.tliCapacityKg))} lb to the Moon (12,600 m/s), rocket ${fmtUsdM(v.costM)}.\n${v.desc}\n${v.learn}` : `${v.name}: ${(v.tliCapacityKg / 1000).toFixed(1)} t to TLI, $${v.costM}M, ${(v.reliability * 100).toFixed(1)}% reliable.\n${v.desc}\n${v.learn}` })), p.lv, (v) => { this.design.plan.lv = v as Design['plan']['lv']; });
+    row(19, 'LAUNCH VEHICLE', LAUNCH_VEHICLES.map((v) => ({ id: v.id, label: v.short.split(' ')[0].toUpperCase().slice(0, 7), tip: SPEC_MODEL ? `${v.name}: ${fmt(kgToLb(v.tliCapacityKg))} lb to the Moon (12,600 m/s), rocket ${fmtUsdM(v.costM)}.\n${v.desc}\n${v.learn}` : `${v.name}: ${(v.tliCapacityKg / 1000).toFixed(1)} t to TLI, $${v.costM}M, ${(v.reliability * 100).toFixed(1)}% reliable.\n${v.desc}\n${v.learn}` })), p.lv, (v) => { this.design.plan.lv = v as Design['plan']['lv']; if (this.design.spec) this.design.spec.rocket = null; });
     row(46, 'LANDING SITE', SITES.map((s) => ({ id: s.id, label: s.short.split(' ')[0].toUpperCase().slice(0, 7), tip: `${s.name}: ${SPEC_MODEL ? `LOI ${missionDv(this.design).loi} m/s, TEI ${missionDv(this.design).tei} m/s, descent ${missionDv(this.design).descent} m/s (set by the lunar orbit)` : `LOI ${s.dvLoi} m/s, TEI ${s.dvTei} m/s, descent ${s.dvDescent} m/s`}. Science x${s.scienceMult}.\n${s.desc}\n${s.learn}` })), p.site, (v) => { this.design.plan.site = v as Design['plan']['site']; });
     row(73, 'CREW SIZE', [{ id: 3, label: '3 CREW', tip: '3 crew: 2 land, 1 stays in orbit (Apollo style). Fewer consumables.' }, { id: 4, label: '4 CREW', tip: '4 crew: up to 3 land with the Pathfinder lander. More EVA hours, more consumables and mass.' }], p.crew, (v) => { this.design.plan.crew = v as 3 | 4; });
     row(100, 'SURFACE STAY', [1, 2, 3].map((d) => ({ id: d, label: `${d} DAY${d > 1 ? 'S' : ''}`, tip: `${d} day(s) on the surface. Longer stays allow more EVAs but need lander battery & consumables (and crew food/water in orbit).` })), p.stayDays, (v) => { this.design.plan.stayDays = v as 1 | 2 | 3; });
     row(127, 'OPS TEMPO', TEMPOS.map((t) => ({ id: t.id, label: t.name.slice(0, 7).toUpperCase(), tip: `${t.name}: ${t.desc}` })), p.tempo, (v) => { this.design.plan.tempo = v as Design['plan']['tempo']; });
     const lv = LV_BY_ID[p.lv], site = SITE_BY_ID[p.site];
-    this.planDetail(`${lv.name} → ${site.name}. ${site.desc}`);
+    this.planDetail(`${lv.name}${specOf(this.design).rocket ? ' (fuel set at the Calculation Desk)' : ''} → ${site.name}. ${site.desc}`);
+  }
+
+  /** Mission Style (spec tab 2 'the big choice'): capsule, lunar orbit, architecture. */
+  renderStyle() {
+    const R = this.right, x0 = 326;
+    const sp = specOf(this.design);
+    R.add(txt(this, 400, 7, 'MISSION STYLE', { align: 'center', color: C.gold }));
+    const row = (y: number, label: string, rundown: string, items: { id: string; label: string; tip: string }[], cur: string, set: (v: string) => void) => {
+      const l = txt(this, x0 + 2, y, label, { color: C.dim });
+      // the detail box may trim; the tooltip always shows the full rundown and numbers
+      const show = (t: string) => { this.planDetail(t); Tooltip.show(this, t, { x: 140, y: 150 }); };
+      l.setInteractive({ useHandCursor: true }); l.on('pointerover', () => show(rundown)); l.on('pointerout', () => Tooltip.hide());
+      R.add(l);
+      const bw = Math.floor(146 / items.length) - 2;
+      items.forEach((it, i) => {
+        const b = new Button(this, x0 + i * (bw + 2), y + 9, it.label, () => { if (cur !== it.id) this.change(() => set(it.id)); }, { w: bw, h: 13 });
+        b.setSelected(cur === it.id);
+        b.bg.on('pointerover', () => show(it.tip));
+        b.bg.on('pointerout', () => Tooltip.hide());
+        R.add(b);
+      });
+    };
+    const setSpec = (patch: Partial<SpecDesign>) => { this.design.spec = { ...specOf(this.design), ...patch }; };
+    row(18, 'CAPSULE', STYLE_RUNDOWN.capsule, CAPSULES.map((c) => ({ id: c.id, label: c.id === 'cap_orion' ? 'ORION' : c.id === 'cap_apollo' ? 'APOLLO' : 'BUDGET',
+      tip: `${CAPSULE_RUNDOWN[c.id]} ${c.crew.v} crew, ${c.maxDays.v} days, ${fmt(c.smFuelLb.v)} lb fuel, ${fmt(c.veMs.v)} m/s, shield ${fmt(c.shieldMph.v)} mph, ${fmtUsd(c.priceUsd.v)}.` })), sp.capsule, (v) => setSpec({ capsule: v }));
+    row(42, 'LUNAR ORBIT', STYLE_RUNDOWN.orbit, (['LLO', 'NRHO'] as OrbitId[]).map((o) => ({ id: o, label: o === 'LLO' ? 'LOW' : 'HALO',
+      tip: `${ORBIT_RUNDOWN[o]} In ${ORBITS[o].loi.v} / home ${ORBITS[o].tei.v} / down ${fmt(ORBITS[o].down.v)} / up ${fmt(ORBITS[o].up.v)} m/s.` })), sp.orbit, (v) => setSpec({ orbit: v as OrbitId }));
+    row(66, 'ARCHITECTURE', STYLE_RUNDOWN.architecture, [{ id: 'apollo', label: 'APOLLO (1)', tip: ARCH_RUNDOWN.apollo }, { id: 'artemis', label: 'ARTEMIS (2)', tip: ARCH_RUNDOWN.artemis }], sp.architecture, (v) => setSpec({ architecture: v as 'apollo' | 'artemis' }));
+    // key numbers for the current choices, straight from the analysis
+    const S = this.review.stats.spec!, L = this.review.stats.lander;
+    const ok = (b: boolean) => (b ? '✓' : '×');
+    const lines = [
+      `Fuel ${fmt(kgToLb(S.capsule.propKg))} lb · ${S.capsule.maxDays} d`,
+      `${ok(S.capsuleReturn.pass)} Home ${fmt(S.capsuleReturn.dvLeft)}/${fmt(S.capsuleReturn.need)} m/s`,
+      ...(L.present ? [`${ok(L.descentDvAvail >= L.descentDvReq)} Down ${fmt(L.descentDvAvail)}/${fmt(L.descentDvReq)} m/s`] : []),
+      `${ok(S.shieldHealth >= 0.9)} Shield ${Math.round(S.shieldHealth * 100)}% · ${S.launches.length} launch${S.launches.length > 1 ? 'es' : ''}`,
+    ];
+    const t = txt(this, x0 + 2, 90, lines.join('\n'), { maxWidth: 146, color: C.text });
+    while (90 + t.height > 153 && t.text.length > 10) t.setText(t.text.split('\n').slice(0, -1).join('\n'));
+    R.add(t);
+    this.planDetail(STYLE_RUNDOWN.capsule);
   }
   planDetail(text: string) {
     this.detail.removeAll(true);
     this.detail.add(this.add.rectangle(326, 155, 148, 1, C.gold, 0.6).setOrigin(0, 0));
-    this.detail.add(txt(this, 328, 158, text, { maxWidth: 144, color: C.text }));
+    const t = txt(this, 328, 158, text, { maxWidth: 144, color: C.text });
+    while (158 + t.height > 212 && t.text.length > 12) t.setText(t.text.replace(/\s*\S+…?$/, '…')); // never clip
+    this.detail.add(t);
   }
 
   hint() {
