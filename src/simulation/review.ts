@@ -5,7 +5,9 @@
 import { Design, LV_BY_ID, SITE_BY_ID } from '../data/mission';
 import { COMPONENT_BY_ID } from '../data/components';
 import { analyzeDesign, DesignStats } from './spacecraft';
-import { BUDGET_M } from './constants';
+import { BUDGET_M, SPEC_MODEL } from './constants';
+import { applySpecReview } from './specReview';
+import { fmtLb } from './units';
 
 export type CheckStatus = 'pass' | 'warn' | 'fail';
 export interface ReviewCheck {
@@ -20,7 +22,7 @@ export interface ReviewCheck {
 }
 export interface ReviewResult { stats: DesignStats; checks: ReviewCheck[]; blocking: number; warnings: number; go: boolean }
 
-const kg = (v: number) => `${Math.round(v).toLocaleString('en-US')} kg`;
+const kg = (v: number) => (SPEC_MODEL ? fmtLb(v) : `${Math.round(v).toLocaleString('en-US')} kg`); // player sees lb (spec A3)
 const kw = (w: number) => `${(w / 1000).toFixed(2)} kW`;
 const pct = (f: number) => `${(f * 100).toFixed(1)}%`;
 
@@ -176,6 +178,7 @@ export function reviewDesign(d: Design): ReviewResult {
   });
 
   void COMPONENT_BY_ID;
+  if (SPEC_MODEL && s.spec) applySpecReview(d, s, checks);
   const blocking = checks.filter((c) => c.status === 'fail').length;
   const warnings = checks.filter((c) => c.status === 'warn').length;
   return { stats: s, checks, blocking, warnings, go: blocking === 0 };

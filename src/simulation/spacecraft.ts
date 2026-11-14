@@ -6,6 +6,7 @@ import { COMPONENT_BY_ID, Component } from '../data/components';
 import { Design, LV_BY_ID, SITE_BY_ID, TEMPO_BY_ID } from '../data/mission';
 import * as K from './constants';
 import { deltaV, propellantForDv } from './rocket';
+import { analyzeSpec, type SpecStats } from './specModel';
 
 export interface MassLine { label: string; kg: number; ids: string[] }
 export interface BurnPlan { name: string; dv: number; m0: number; propKg: number }
@@ -23,6 +24,7 @@ export interface DesignStats {
     nominalLoadW: number; peakLoadW: number; instrumentW: number;
     orbitAvgGenW: number; eclipseWh: number; batteryWh: number; safeModeH: number;
     missionEnergyWh: number; reactantWh: number;
+    builtinSolarW?: number; // spec: capsule solar added on top of fuel cells
     loadLines: { label: string; w: number; ids: string[] }[];
   };
   thermal: { heatPeakW: number; heatNominalW: number; rejectW: number };
@@ -31,11 +33,13 @@ export interface DesignStats {
   lander: {
     present: boolean; crewCapacity: number; descentDvAvail: number; descentDvReq: number; ascentDvAvail: number; ascentDvReq: number;
     approachPropKg: number; stayCapacityH: number; plannedStayH: number; sampleCapacityKg: number; landerLoadW: number; surfacePayloadKg: number;
+    batteryWh?: number; // spec: lander surface battery (5 kWh packs)
   };
   heatShield: { rating: number; entryMassKg: number; effectiveMargin: number };
   reliability: number;
   lv: { capacityKg: number; marginKg: number; marginPct: number };
   scienceIds: string[];
+  spec?: SpecStats; // JOSEPH_SPEC model figures (rocket, capsule, orbit, risks)
 }
 
 export function selectedParts(d: Design): Component[] {
@@ -174,7 +178,7 @@ export function analyzeDesign(d: Design): DesignStats {
   let reliability = parts.reduce((r, p) => r * (p.reliability ?? 1), 1) * lv.reliability;
   if (parts.some((p) => p.id === 'saf_redund')) reliability = 1 - (1 - reliability) * 0.6;
 
-  return {
+  const stats: DesignStats = {
     parts, missing, crew, landingCrew, orbitCrew, missionDays, consumableDays, consumables,
     mass: { csmDryKg, csmWetKg, smPropKg, landerWetKg, tliKg, lines },
     costM, costLines,
@@ -188,4 +192,5 @@ export function analyzeDesign(d: Design): DesignStats {
     lv: { capacityKg: lv.tliCapacityKg, marginKg: lv.tliCapacityKg - tliKg, marginPct: (lv.tliCapacityKg - tliKg) / lv.tliCapacityKg },
     scienceIds: d.science.slice(),
   };
+  return K.SPEC_MODEL ? analyzeSpec(d, stats) : stats;
 }

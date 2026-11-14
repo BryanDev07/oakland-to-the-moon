@@ -3,8 +3,10 @@
  * Science 30%, Crew safety & return 30%, Engineering 20%, Resource efficiency 10%, Budget 10%.
  */
 import { SITE_BY_ID } from '../data/mission';
-import { BUDGET_M, MAPCAM_MAP_TARGET_MB, NEUTRON_TARGET_H } from './constants';
+import { MAPCAM_MAP_TARGET_MB, NEUTRON_TARGET_H } from './constants';
 import { securedMB } from './mission';
+import { budgetForM } from './specModel';
+import { SHIELD_ROUGH_RIDE_SAFETY } from '../data/specParts';
 import type { MissionState } from './types';
 
 export const WEIGHTS = { science: 0.3, crew: 0.3, engineering: 0.2, resources: 0.1, budget: 0.1 };
@@ -66,7 +68,8 @@ export function evaluate(s: MissionState): MissionReport {
   const sciencePoints = sci.reduce((a, l) => a + l.points, 0);
   const scienceScore = clamp01(sciencePoints / SCIENCE_FULL_POINTS) * (s.crewLost ? 0.3 : 1);
 
-  const crewScore = returned ? clamp01(s.condition / 100) * 0.7 + 0.3 : 0;
+  const roughRide = s.flags.entryHealth != null && s.flags.entryHealth < 0.9999 && s.flags.entryHealth >= 0.9; // spec tab 6 #14
+  const crewScore = returned ? clamp01(clamp01(s.condition / 100) * 0.7 + 0.3 + (roughRide ? SHIELD_ROUGH_RIDE_SAFETY.v / 100 : 0)) : 0;
 
   const cap = s.stats.mass.smPropKg || 1;
   const propSub = clamp01(s.propKg / (0.04 * cap));
@@ -81,15 +84,16 @@ export function evaluate(s: MissionState): MissionReport {
   const leftover = (o2f + wf) / 2;
   const resources = returned ? (leftover < 0.05 ? 0.3 : leftover <= 0.4 ? 1 : clamp01(1 - (leftover - 0.4) * 1.2)) : 0;
 
-  const reserve = BUDGET_M - s.stats.costM;
-  const budget = clamp01(0.4 + 0.6 * clamp01(reserve / (0.12 * BUDGET_M)));
+  const budgetM = budgetForM(s.design);
+  const reserve = Math.round(budgetM - s.stats.costM);
+  const budget = clamp01(0.4 + 0.6 * clamp01(reserve / (0.12 * budgetM)));
 
   const parts = [
     { key: 'science' as const, label: 'Scientific objectives', score: scienceScore, weight: WEIGHTS.science, note: `${sciencePoints.toFixed(0)} / ${SCIENCE_FULL_POINTS} science points` },
     { key: 'crew' as const, label: 'Crew safety & return', score: crewScore, weight: WEIGHTS.crew, note: returned ? `Crew home, condition ${Math.round(s.condition)}%` : s.lossCause ?? 'Crew not returned' },
     { key: 'engineering' as const, label: 'Engineering performance', score: engineering, weight: WEIGHTS.engineering, note: `Prop ${Math.round(s.propKg)} kg left, ${s.flags.brownoutH.toFixed(1)} h brownout, ${(s.lostMB / 1000).toFixed(0)} GB lost` },
     { key: 'resources' as const, label: 'Resource efficiency', score: resources, weight: WEIGHTS.resources, note: `${Math.round(leftover * 100)}% of consumables left (ideal 5-40%)` },
-    { key: 'budget' as const, label: 'Budget efficiency', score: budget, weight: WEIGHTS.budget, note: `$${reserve}M of $${BUDGET_M}M unspent` },
+    { key: 'budget' as const, label: 'Budget efficiency', score: budget, weight: WEIGHTS.budget, note: `$${reserve.toLocaleString('en-US')}M of $${budgetM.toLocaleString('en-US')}M unspent` },
   ];
   let overall = parts.reduce((a, p) => a + p.score * p.weight, 0) * 100;
 

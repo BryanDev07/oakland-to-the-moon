@@ -8,6 +8,7 @@ import { COMPONENT_BY_ID } from '../../data/components';
 import { SITE_BY_ID } from '../../data/mission';
 import { FREE_RETURN_S, HOUR, TRANSIT_BACK_S, TRANSIT_OUT_S } from '../../simulation/constants';
 import type { MissionState } from '../../simulation/types';
+import { missionDv } from '../../simulation/specModel';
 
 const SPEEDS = [0, 12, 48, 192]; // sim steps (5 min each) per real second
 const PHASE_LABEL: Record<string, string> = {
@@ -164,7 +165,7 @@ export class OpsScene extends Phaser.Scene {
         break;
       case 'LOI_PENDING': {
         const ok = Sim.canAffordLOIAndReturn(s);
-        act('EXECUTE LUNAR ORBIT INSERTION', () => this.doLOI(), `Brake into lunar orbit: ${SITE_BY_ID[s.design.plan.site].dvLoi} m/s.`, 'go', 220, 150);
+        act('EXECUTE LUNAR ORBIT INSERTION', () => this.doLOI(), `Brake into lunar orbit: ${missionDv(s.design).loi} m/s.`, 'go', 220, 150);
         act('FREE RETURN', () => this.doFreeReturn(), 'Abort: loop around the Moon and come home without landing. Uses almost no propellant.', 'normal', 220, 74, 400);
         if (!ok) this.time.delayedCall(300, () => toast(this, 'Flight Dynamics', 'WARNING: projected propellant is NOT enough to enter orbit AND return. A free-return abort is the safe option.', 'portrait_capcom', 8000));
         this.setSpeed(0);
@@ -175,7 +176,7 @@ export class OpsScene extends Phaser.Scene {
         act('ABORT HOME', () => this.confirmAbortHome(), 'Skip the landing and burn for Earth now.', 'normal', 220, 74, 400);
         break;
       case 'LUNAR_ORBIT_POST':
-        act('EXECUTE TRANS-EARTH INJECTION', () => this.doTEI(), `Burn for home: ${SITE_BY_ID[s.design.plan.site].dvTei} m/s. Keep mapping first if you like.`, 'go');
+        act('EXECUTE TRANS-EARTH INJECTION', () => this.doTEI(), `Burn for home: ${missionDv(s.design).tei} m/s. Keep mapping first if you like.`, 'go');
         break;
       default: break;
     }

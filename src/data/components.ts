@@ -3,6 +3,9 @@
  * balance; magnitudes are informed by Apollo/Orion-class hardware (see docs/SCIENTIFIC_ASSUMPTIONS.md).
  * Units: mass kg, cost $M, power W (positive = consumption, generation in `genW`), energy Wh.
  */
+import { lbToKg } from '../simulation/units';
+import { SPEC_LANDER_COMPONENTS } from './specComponents';
+
 export type SlotId =
   | 'propulsion' | 'tank' | 'lander' | 'power' | 'battery' | 'comms' | 'storage'
   | 'lifeSupport' | 'thermal' | 'heatShield' | 'guidance' | 'safety' | 'science';
@@ -43,6 +46,9 @@ export interface Component {
   landerBatteryWh?: number; landerLoadW?: number; stayRatedH?: number; sampleCapacityKg?: number;
   onLander?: boolean; // mass carried by lander rather than CSM
   dataMbps?: number; // science data rate while active
+  dataMBPerDay?: number; // spec tab 4: surface data per day (MB)
+  ascentThrustN?: number; // lander ascent engine (spec tab 3 section 6)
+  specTag?: 'R' | 'G'; // R/G tag for spec-sourced parts (values in src/data/specParts.ts)
   scienceTag?: string;
 }
 
@@ -79,18 +85,20 @@ export const COMPONENTS: Component[] = [
     massKg: 0, costM: 1450, crewCapacity: 3, descentDryKg: 2900, descentPropKg: 11200, ascentDryKg: 2600, ascentPropKg: 3050,
     ispS: 316, thrustN: 60000, landerBatteryWh: 160000, landerLoadW: 1400, stayRatedH: 150, sampleCapacityKg: 90, reliability: 0.985,
   },
+  ...SPEC_LANDER_COMPONENTS,
   // ---------------------------------------------------------------- power
   { id: 'pwr_solar6', slot: 'power', name: 'Rigid Solar Wings', short: 'Solar 6 kW', sprite: 'pwr_solar4', desc: 'Two rigid wings, 6.0 kW in full sunlight.', learn: 'Solar arrays produce nothing in shadow. In low lunar orbit ~40% of every orbit is dark, so ORBIT-AVERAGE power is what matters.', massKg: 380, costM: 70, genW: 6000, genKind: 'solar', reliability: 0.995 },
   { id: 'pwr_solar11', slot: 'power', name: 'High-Efficiency Solar Wings', short: 'Solar 11 kW', sprite: 'pwr_solar8', desc: 'Multi-junction cells, 11 kW in full sunlight.', learn: 'Higher-efficiency cells give more watts per kg and per square metre, at higher cost.', massKg: 450, costM: 160, genW: 11000, genKind: 'solar', reliability: 0.995 },
   { id: 'pwr_fuelcell', slot: 'power', name: 'Fuel Cell Stack', short: 'Fuel cells', sprite: 'pwr_fuelcell', desc: '3.6 kW day or night from H2/O2 reactants; makes drinking water.', learn: 'Apollo used fuel cells: they work in darkness and produce water, but run out when reactants are consumed (~0.35 kg per kWh).', massKg: 760, costM: 140, genW: 3600, genKind: 'fuelcell', fuelCellReactantWh: 800000, reliability: 0.99 },
+  { id: 'pwr_ultraflex', slot: 'power', name: 'UltraFlex Arrays (pair)', short: 'UltraFlex 3.5 kW', sprite: 'pwr_solar4', desc: 'Fan-shaped Cygnus arrays, 3,500 W in full sunlight.', learn: 'Light, compact arrays. Capsules with built-in solar (Orion: 11,000 W) may not need any.', massKg: lbToKg(400), costM: 10, genW: 3500, genKind: 'solar', specTag: 'G' },
   // ---------------------------------------------------------------- batteries
   { id: 'bat_12', slot: 'battery', name: 'Li-ion Battery 12 kWh', short: '12 kWh', sprite: 'battery', desc: 'Covers eclipses; ~5 h of safe-mode loads.', learn: 'E_next = clamp(E + (P_gen − P_load)·Δt, 0, E_max). Batteries bridge gaps when generation drops.', massKg: 90, costM: 15, storageWh: 12000 },
   { id: 'bat_24', slot: 'battery', name: 'Li-ion Battery 24 kWh', short: '24 kWh', sprite: 'battery', desc: 'Comfortable reserve for faults and eclipses.', learn: 'Li-ion packs store roughly 130-150 Wh per kg at the pack level.', massKg: 170, costM: 28, storageWh: 24000 },
   { id: 'bat_40', slot: 'battery', name: 'Li-ion Battery 40 kWh', short: '40 kWh', sprite: 'battery', desc: 'Large reserve: a full day of safe-mode power.', learn: 'A big battery buys TIME to respond when something goes wrong.', massKg: 280, costM: 45, storageWh: 40000 },
   // ---------------------------------------------------------------- comms
-  { id: 'com_sband', slot: 'comms', name: 'S-Band Omni Antennas', short: 'S-band 0.5', sprite: 'com_sband', desc: '0.5 Mbps from lunar distance. Light and simple.', learn: 'Low-gain antennas radiate in all directions; at 384,000 km that limits the data rate.', massKg: 35, costM: 20, powerW: 80, downlinkMbps: 0.5, linkAvailability: 1, reliability: 0.999 },
-  { id: 'com_hga', slot: 'comms', name: 'Steerable High-Gain Antenna', short: 'HGA 6 Mbps', sprite: 'com_hga', desc: '6 Mbps; must be pointed at Earth.', learn: 'Focusing energy into a narrow beam increases the data rate but requires accurate pointing.', massKg: 85, costM: 55, powerW: 160, downlinkMbps: 6, linkAvailability: 1, reliability: 0.995 },
-  { id: 'com_laser', slot: 'comms', name: 'Optical Laser Terminal', short: 'Laser 100', sprite: 'com_laser', desc: '100 Mbps, but clouds over the ground station block it (~65% available). S-band backup.', learn: 'Optical links carry far more data, but the beam cannot pass through clouds: link availability is a real design driver.', massKg: 70, costM: 120, powerW: 140, downlinkMbps: 100, linkAvailability: 0.65, backupMbps: 0.5, reliability: 0.99 },
+  { id: 'com_sband', slot: 'comms', name: 'Deep-space S-band (NASA DSN)', short: 'S-band 256k', sprite: 'com_sband', desc: '256 kbps from lunar distance. Light and simple.', learn: 'Low-gain antennas radiate in all directions; at 238,855 miles that limits the data rate. Earth-orbit radios (UHF, small S-band) cannot reach the Moon at all.', massKg: lbToKg(40), costM: 10, powerW: 60, downlinkMbps: 0.256, specTag: 'G', linkAvailability: 1, reliability: 0.999 },
+  { id: 'com_hga', slot: 'comms', name: 'Deep-space Ka-band', short: 'Ka 6,000k', sprite: 'com_hga', desc: '6,000 kbps; the dish must be pointed at Earth.', learn: 'Focusing energy into a narrow beam increases the data rate but requires accurate pointing.', massKg: lbToKg(80), costM: 25, powerW: 150, specTag: 'G', downlinkMbps: 6, linkAvailability: 1, reliability: 0.995 },
+  { id: 'com_laser', slot: 'comms', name: 'Laser comms terminal', short: 'Laser 100,000k', sprite: 'com_laser', desc: '100,000 kbps, but clouds over the ground station block it (~65% available). S-band backup.', learn: 'Optical links carry far more data, but the beam cannot pass through clouds: link availability is a real design driver.', massKg: lbToKg(60), costM: 40, powerW: 100, downlinkMbps: 100, linkAvailability: 0.65, backupMbps: 0.256, specTag: 'G', reliability: 0.99 },
   // ---------------------------------------------------------------- storage
   { id: 'dat_128', slot: 'storage', name: 'Data Recorder 128 GB', short: '128 GB', sprite: 'dat_s', desc: 'Basic solid-state recorder.', learn: 'Stored = clamp(Stored + Generated − Downlinked, 0, Capacity). A full recorder means new data is LOST.', massKg: 8, costM: 8, powerW: 15, storageMB: 128000 },
   { id: 'dat_1t', slot: 'storage', name: 'Rad-Hard Recorder 1 TB', short: '1 TB', sprite: 'dat_l', desc: 'Large radiation-tolerant storage.', learn: 'More storage lets you collect now and transmit (or bring home) later.', massKg: 14, costM: 30, powerW: 30, storageMB: 1000000 },
@@ -112,10 +120,10 @@ export const COMPONENTS: Component[] = [
   // ---------------------------------------------------------------- science (multi)
   { id: 'sci_mapcam', slot: 'science', name: 'Orbital Mapping Camera', short: 'Mapping cam', sprite: 'sci_mapcam', desc: 'High-res imaging from orbit. 40 Mbps while imaging in sunlight.', learn: 'Imaging needs sunlight and makes huge data volumes: storage and downlink must keep up.', massKg: 45, costM: 60, powerW: 120, dataMbps: 40, scienceTag: 'map' },
   { id: 'sci_neutron', slot: 'science', name: 'Neutron Spectrometer', short: 'Neutron spec', sprite: 'sci_neutron', desc: 'Detects hydrogen (water ice) from orbit. Low data rate.', learn: 'Cosmic rays knock neutrons out of the surface; hydrogen absorbs them, revealing buried ice.', massKg: 25, costM: 35, powerW: 30, dataMbps: 0.05, scienceTag: 'neutron' },
-  { id: 'sci_seismo', slot: 'science', name: 'Seismometer Package', short: 'Seismometer', sprite: 'sci_seismo', desc: 'Deployed on the surface; listens for moonquakes for years.', learn: 'Apollo seismometers revealed the Moon’s layered interior and shallow moonquakes.', massKg: 70, costM: 45, onLander: true, scienceTag: 'seismo' },
-  { id: 'sci_samples', slot: 'science', name: 'Geology Sample Kit', short: 'Sample kit', sprite: 'sci_samples', desc: 'Tools and sealed containers to return rocks and regolith.', learn: 'Returned samples can be studied with lab instruments far beyond anything we can fly.', massKg: 35, costM: 20, onLander: true, scienceTag: 'samples' },
-  { id: 'sci_pancam', slot: 'science', name: 'Panoramic Surface Camera', short: 'Pan camera', sprite: 'sci_pancam', desc: 'Stereo panoramas of the landing site and geology context.', learn: 'Context imaging tells scientists where each sample came from.', massKg: 18, costM: 25, powerW: 25, onLander: true, scienceTag: 'pancam' },
-  { id: 'sci_retro', slot: 'science', name: 'Laser Retroreflector', short: 'Retroreflector', sprite: 'sci_retro', desc: 'Passive mirror array for laser ranging from Earth.', learn: 'Apollo retroreflectors are still used to measure the Earth–Moon distance to millimetres.', massKg: 25, costM: 10, onLander: true, scienceTag: 'retro' },
+  { id: 'sci_seismo', slot: 'science', name: 'Passive Seismometer', short: 'Seismometer', sprite: 'sci_seismo', desc: 'Listens for moonquakes and meteor hits, like a microphone in the ground.', learn: 'Apollo seismometers revealed the Moon’s layered interior and shallow moonquakes.', massKg: lbToKg(25), costM: 20, powerW: 10, dataMBPerDay: 50, specTag: 'G', onLander: true, scienceTag: 'seismo' },
+  { id: 'sci_samples', slot: 'science', name: 'Sample Return Kit', short: 'Sample kit', sprite: 'sci_samples', desc: 'Tools and boxes to bring home 100 lb of Moon rock.', learn: 'Returned samples can be studied with lab instruments far beyond anything we can fly. Rocks ride the ascent stage AND the capsule home, so they cost propellant twice.', massKg: lbToKg(30), costM: 15, specTag: 'G', onLander: true, scienceTag: 'samples' },
+  { id: 'sci_pancam', slot: 'science', name: 'HD Science Cameras', short: 'HD cameras', sprite: 'sci_pancam', desc: 'Video and photos of the site. 5,000 MB of data per day.', learn: 'Context imaging tells scientists where each sample came from. Cameras make huge amounts of data: a slow radio cannot send it all home.', massKg: lbToKg(15), costM: 5, powerW: 30, dataMBPerDay: 5000, specTag: 'G', onLander: true, scienceTag: 'pancam' },
+  { id: 'sci_retro', slot: 'science', name: 'Laser Retroreflector', short: 'Retroreflector', sprite: 'sci_retro', desc: 'A mirror that bounces lasers from Earth to measure the Moon’s distance.', learn: 'Apollo 11’s retroreflector is still used to measure the Earth–Moon distance to millimetres.', massKg: lbToKg(50), costM: 10, specTag: 'G', onLander: true, scienceTag: 'retro' },
 ];
 
 export const SLOTS: { id: SlotId; label: string; icon: string; multi?: boolean; help: string }[] = [

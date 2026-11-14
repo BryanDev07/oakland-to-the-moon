@@ -20,7 +20,7 @@ export interface PendingEvent {
 }
 
 export interface MissionState {
-  version: 1;
+  version: 2; // v2: JOSEPH_SPEC model (v1 saves are discarded)
   seed: number;
   rngState: number;
   design: Design;
@@ -73,7 +73,7 @@ export interface MissionState {
   surface: { day: number; evaUsedToday: number; hoursOnSurface: number; done: Record<string, number>; samplesKg: number; points: Record<string, number>; broadcast: boolean };
   samplesAboardKg: number;
   // bookkeeping
-  flags: { brownoutH: number; thermalH: number; minBatteryFrac: number; minPropMarginKg: number; tliTrimDv: number; stranded: boolean; entryOk: boolean | null };
+  flags: { brownoutH: number; thermalH: number; minBatteryFrac: number; minPropMarginKg: number; tliTrimDv: number; stranded: boolean; entryOk: boolean | null; entryHealth?: number | null };
   crewLost: boolean;
   lossCause: string | null;
   log: LogEntry[];

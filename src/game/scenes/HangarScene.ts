@@ -7,7 +7,8 @@ import { COMPONENT_BY_ID, Component, componentsInSlot, SLOTS, SlotId } from '../
 import { cloneDesign, Design, LAUNCH_VEHICLES, REFERENCE_DESIGN, SITES, TEMPOS, LV_BY_ID, SITE_BY_ID } from '../../data/mission';
 import { reviewDesign, ReviewResult } from '../../simulation/review';
 import { analyzeDesign, DesignStats } from '../../simulation/spacecraft';
-import { BUDGET_M } from '../../simulation/constants';
+import { BUDGET_M, SPEC_MODEL } from '../../simulation/constants';
+import { CAPSULE_OWNED_SLOTS, missionDv } from '../../simulation/specModel';
 
 type Cat = SlotId | 'plan';
 const FLOOR_Y = 209;
@@ -52,7 +53,7 @@ export class HangarScene extends Phaser.Scene {
     // left: categories
     panel(this, 2, 2, 104, 210, 'panel');
     txt(this, 54, 7, 'SYSTEMS', { align: 'center', color: C.gold });
-    const cats: { id: Cat; label: string; icon: string }[] = [{ id: 'plan', label: 'Mission Plan', icon: 'rocket' }, ...SLOTS.map((s) => ({ id: s.id as Cat, label: s.label, icon: s.icon }))];
+    const cats: { id: Cat; label: string; icon: string }[] = [{ id: 'plan', label: 'Mission Plan', icon: 'rocket' }, ...SLOTS.filter((s) => !(SPEC_MODEL && CAPSULE_OWNED_SLOTS.includes(s.id))).map((s) => ({ id: s.id as Cat, label: s.label, icon: s.icon }))];
     cats.forEach((c, i) => {
       const y = 19 + i * 13.6;
       const bg = this.add.rectangle(6, y, 96, 13, 0x2a4c98, 0).setOrigin(0, 0).setInteractive({ useHandCursor: true });
@@ -326,7 +327,7 @@ export class HangarScene extends Phaser.Scene {
       });
     };
     row(19, 'LAUNCH VEHICLE', LAUNCH_VEHICLES.map((v) => ({ id: v.id, label: v.short.split(' ')[0].toUpperCase().slice(0, 7), tip: `${v.name}: ${(v.tliCapacityKg / 1000).toFixed(1)} t to TLI, $${v.costM}M, ${(v.reliability * 100).toFixed(1)}% reliable.\n${v.desc}\n${v.learn}` })), p.lv, (v) => { this.design.plan.lv = v as Design['plan']['lv']; });
-    row(46, 'LANDING SITE', SITES.map((s) => ({ id: s.id, label: s.short.split(' ')[0].toUpperCase().slice(0, 7), tip: `${s.name}: LOI ${s.dvLoi} m/s, TEI ${s.dvTei} m/s, descent ${s.dvDescent} m/s. Science x${s.scienceMult}.\n${s.desc}\n${s.learn}` })), p.site, (v) => { this.design.plan.site = v as Design['plan']['site']; });
+    row(46, 'LANDING SITE', SITES.map((s) => ({ id: s.id, label: s.short.split(' ')[0].toUpperCase().slice(0, 7), tip: `${s.name}: ${SPEC_MODEL ? `LOI ${missionDv(this.design).loi} m/s, TEI ${missionDv(this.design).tei} m/s, descent ${missionDv(this.design).descent} m/s (set by the lunar orbit)` : `LOI ${s.dvLoi} m/s, TEI ${s.dvTei} m/s, descent ${s.dvDescent} m/s`}. Science x${s.scienceMult}.\n${s.desc}\n${s.learn}` })), p.site, (v) => { this.design.plan.site = v as Design['plan']['site']; });
     row(73, 'CREW SIZE', [{ id: 3, label: '3 CREW', tip: '3 crew: 2 land, 1 stays in orbit (Apollo style). Fewer consumables.' }, { id: 4, label: '4 CREW', tip: '4 crew: up to 3 land with the Pathfinder lander. More EVA hours, more consumables and mass.' }], p.crew, (v) => { this.design.plan.crew = v as 3 | 4; });
     row(100, 'SURFACE STAY', [1, 2, 3].map((d) => ({ id: d, label: `${d} DAY${d > 1 ? 'S' : ''}`, tip: `${d} day(s) on the surface. Longer stays allow more EVAs but need lander battery & consumables (and crew food/water in orbit).` })), p.stayDays, (v) => { this.design.plan.stayDays = v as 1 | 2 | 3; });
     row(127, 'OPS TEMPO', TEMPOS.map((t) => ({ id: t.id, label: t.name.slice(0, 7).toUpperCase(), tip: `${t.name}: ${t.desc}` })), p.tempo, (v) => { this.design.plan.tempo = v as Design['plan']['tempo']; });
@@ -348,7 +349,7 @@ export class HangarScene extends Phaser.Scene {
     modal(this, {
       title: fails.length ? `${fails.length} BLOCKING ISSUE${fails.length > 1 ? 'S' : ''}` : 'ENGINEERING HINT', text,
       options: [{ label: 'Keep building' }, { label: 'Load a proven reference design', detail: 'A known-good starting point you can modify.' }],
-      onChoose: (i) => { if (i === 1) this.change((d) => { const r = cloneDesign(REFERENCE_DESIGN); d.slots = r.slots; d.safety = r.safety; d.science = r.science; d.plan = r.plan; }, 'capsule'); },
+      onChoose: (i) => { if (i === 1) this.change((d) => { const r = cloneDesign(REFERENCE_DESIGN); d.slots = r.slots; d.safety = r.safety; d.science = r.science; d.plan = r.plan; d.spec = r.spec; }, 'capsule'); },
     });
   }
 

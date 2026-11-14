@@ -8,6 +8,17 @@ ISS-era numbers (see `SOURCES.md`). Nothing here is NASA-validated.
 All simulation code lives in `src/simulation/` and uses SI units internally:
 mass kg, velocity m/s, time s, power W, energy Wh, data MB (megabytes), data rate Mbps (megabits/s).
 
+> **Spec model (JOSEPH_SPEC.md, `SPEC_MODEL = true` in `constants.ts`).** The numbers in sections
+> 1, 3, 6, 10 and 11 below describe the original model, which is kept behind that flag. With the
+> spec model on: the launch vehicle is a staged rocket that must reach 12,600 m/s (9,400 to Earth
+> orbit + 3,200 to the Moon) with liftoff TWR ≥ 1.2 (`stack.ts`); the crew capsule (Orion /
+> Apollo-class CSM / Budget) supplies the service-module engine, fuel, heat shield and solar;
+> lunar-orbit Δv comes from the orbit choice (LLO: 900 in / 900 home / 1,870 down / 1,870 up;
+> NRHO: 430 / 410 / 2,600 / 2,600 m/s); life support is 14.97 lb per astronaut per day and an
+> astronaut + suit is 400 lb; and heat-shield health = rating ÷ 24,400 mph. Every spec value, with its R/G tag, is in
+> `src/data/specParts.ts`; every formula is in `src/simulation/formulas.ts`. Spec data is stored in
+> lb and converted to kg once (`src/simulation/units.ts`).
+
 ## 1. Mission architecture (abstracted Apollo-style)
 
 | Phase | Performed by | Δv (m/s) | Notes |

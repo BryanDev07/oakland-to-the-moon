@@ -51,7 +51,7 @@ class Store {
     const d = read<unknown>(KEY.design, null);
     this.design = validDesign(d) ? d : cloneDesign(BASELINE_DESIGN);
     const m = read<MissionState | null>(KEY.mission, null);
-    this.mission = m && m.version === 1 && validDesign(m.design) ? m : null;
+    this.mission = m && m.version === 2 && validDesign(m.design) ? m : null; // v1 missions predate the spec model
     this.history = read<HistoryEntry[]>(KEY.history, []).filter((h) => h && typeof h.score === 'number').slice(0, 20);
     this.settings = { ...DEFAULT_SETTINGS, ...read<Partial<Settings>>(KEY.settings, {}) };
     this.seen = read<Record<string, boolean>>(KEY.seen, {});

@@ -43,7 +43,7 @@ export function surfaceStatus(s: MissionState) {
   const evaLeftToday = tempo.evaHoursPerDay - s.surface.evaUsedToday;
   const daysLeft = s.design.plan.stayDays - s.surface.day;
   const asc = ascentCheck(s);
-  return { tempo, stayH, evaLeftToday, daysLeft, landerBatteryWh: s.landerBatteryWh, landerBatteryCap: s.stats.parts.find((p) => p.slot === 'lander')?.landerBatteryWh ?? 1, ascent: asc };
+  return { tempo, stayH, evaLeftToday, daysLeft, landerBatteryWh: s.landerBatteryWh, landerBatteryCap: Math.max(1, s.stats.lander.batteryWh ?? s.stats.parts.find((p) => p.slot === 'lander')?.landerBatteryWh ?? 1), ascent: asc };
 }
 
 export function availableActivities(s: MissionState): AvailableActivity[] {
