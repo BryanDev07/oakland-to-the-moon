@@ -1,0 +1,470 @@
+/**
+ * Deterministic mission simulation. State is plain JSON (saveable). Coast phases advance with a
+ * fixed timestep (SIM_DT); player actions (burns, landing, surface activities) are discrete calls.
+ */
+import { COMPONENT_BY_ID } from '../data/components';
+import { cloneDesign, Design, LV_BY_ID, SITE_BY_ID, TEMPO_BY_ID } from '../data/mission';
+import * as K from './constants';
+import { EVENT_BY_ID, scheduleEvents } from './events';
+import { Rng } from './rng';
+import { deltaV, propellantForDv } from './rocket';
+import { analyzeDesign } from './spacecraft';
+import type { DataSource, LogEntry, MissionState, Phase } from './types';
+
+export type { MissionState, Phase } from './types';
+
+const SOURCES: DataSource[] = ['map', 'neutron', 'pancam', 'seismo'];
+const zeroData = (): Record<DataSource, number> => ({ map: 0, neutron: 0, pancam: 0, seismo: 0 });
+
+// ------------------------------------------------------------------ creation
+export function createMission(design: Design, seed: number): MissionState {
+  const d = cloneDesign(design);
+  const stats = analyzeDesign(d);
+  const rng = new Rng(seed);
+  const lander = stats.parts.find((p) => p.slot === 'lander');
+  const ls = stats.parts.find((p) => p.slot === 'lifeSupport');
+  const instruments: MissionState['instruments'] = {};
+  for (const p of stats.parts) if (p.slot === 'science' && !p.onLander) instruments[p.id] = { on: false, failed: false, hours: 0 };
+  const weather: boolean[] = [];
+  for (let i = 0; i < 64; i++) weather.push(rng.chance(stats.comms.availability || 1));
+  const s: MissionState = {
+    version: 1, seed, rngState: 0, design: d, stats,
+    t: 0, phase: 'TRANSIT_OUT', phaseStart: 0,
+    propKg: stats.mass.smPropKg, ispFactor: 1,
+    batteryWh: stats.power.batteryWh, batteryCapWh: stats.power.batteryWh,
+    solarFactor: 1, fuelCellFactor: 1, reactantWh: stats.power.reactantWh, safeModeUntil: -1,
+    landerAttached: !!lander,
+    landerDescentPropKg: lander?.descentPropKg ?? 0, landerAscentPropKg: lander?.ascentPropKg ?? 0, landerBatteryWh: lander?.landerBatteryWh ?? 0,
+    crewOnCsm: stats.crew, condition: 100,
+    o2Kg: stats.consumables.o2Kg, waterKg: stats.consumables.waterKg, foodKg: stats.consumables.foodKg,
+    waterRecovery: ls?.waterRecovery ?? 0, o2Recovery: ls?.o2Recovery ?? 0, rationing: false, radiationDoseMSv: 0,
+    powerMode: 'normal', commsMode: 'high', instruments, autoShed: true, commOutageUntil: -1, weather,
+    storedMB: zeroData(), downMB: zeroData(), acquiredMB: zeroData(), lostMB: 0,
+    schedule: [], pending: null, timed: [], eventsSeen: [], decisions: [], entryDispersion: 1,
+    landing: { attempted: false, outcome: 'none', vImpact: 0, propLeftKg: 0, damaged: null },
+    surface: { day: 1, evaUsedToday: 0, hoursOnSurface: 0, done: {}, samplesKg: 0, points: {}, broadcast: false },
+    samplesAboardKg: 0,
+    flags: { brownoutH: 0, thermalH: 0, minBatteryFrac: 1, minPropMarginKg: Infinity, tliTrimDv: 0, stranded: false, entryOk: null },
+    crewLost: false, lossCause: null, log: [],
+  };
+  s.schedule = scheduleEvents(s, rng);
+  // Launch vehicle performance: chance of an upper-stage shortfall scales with LV unreliability.
+  const lv = LV_BY_ID[d.plan.lv];
+  if (rng.chance((1 - lv.reliability) * 12)) {
+    s.flags.tliTrimDv = 45;
+    const need = propellantForDv(totalMass(s), 45, isp(s));
+    s.propKg = Math.max(0, s.propKg - need);
+    log(s, `${lv.name} upper stage underperformed by 45 m/s. The service module burned ${Math.round(need)} kg of propellant to complete trans-lunar injection.`, 'warn');
+  }
+  s.rngState = rng.state;
+  log(s, 'Trans-lunar injection complete. TOWN-1 is on its way to the Moon!', 'good');
+  return s;
+}
+
+// ------------------------------------------------------------------ helpers
+export function log(s: MissionState, text: string, kind: LogEntry['kind'] = 'info') {
+  s.log.push({ t: s.t, text, kind });
+  if (s.log.length > 200) s.log.shift();
+}
+const comp = (s: MissionState, slot: string) => s.stats.parts.find((p) => p.slot === slot);
+export const isp = (s: MissionState) => (comp(s, 'propulsion')?.ispS ?? 300) * s.ispFactor;
+
+function consumablesMass(s: MissionState) { return Math.max(0, s.o2Kg) + Math.max(0, s.waterKg) + Math.max(0, s.foodKg); }
+
+/** Current crew-vehicle (CSM) mass: dry + propellant + consumables + crew aboard + samples. */
+export function csmMass(s: MissionState): number {
+  const st = s.stats;
+  const dryNoCrew = st.mass.csmDryKg - st.crew * K.CREW_MASS_KG - st.consumables.totalKg;
+  return dryNoCrew + s.propKg + consumablesMass(s) + s.crewOnCsm * K.CREW_MASS_KG + s.samplesAboardKg;
+}
+export function landerMass(s: MissionState): number {
+  const L = comp(s, 'lander');
+  if (!L || !s.landerAttached) return 0;
+  return L.descentDryKg! + s.landerDescentPropKg + L.ascentDryKg! + s.landerAscentPropKg + s.stats.lander.surfacePayloadKg;
+}
+export function totalMass(s: MissionState) { return csmMass(s) + landerMass(s); }
+
+export function phaseTime(s: MissionState) { return s.t - s.phaseStart; }
+function setPhase(s: MissionState, p: Phase) { s.phase = p; s.phaseStart = s.t; }
+
+/** Remaining SM burns from the current phase, with propellant projections. */
+export function projectBurns(s: MissionState): { name: string; dv: number; propKg: number }[] {
+  const site = SITE_BY_ID[s.design.plan.site];
+  const I = isp(s);
+  const out: { name: string; dv: number; propKg: number }[] = [];
+  let m = 0;
+  const burnP = (name: string, dv: number) => { const p = propellantForDv(m, dv, I); out.push({ name, dv, propKg: p }); m -= p; };
+  const lc = s.stats.landingCrew * K.CREW_MASS_KG;
+  const samples = s.stats.lander.sampleCapacityKg;
+  const landing = s.landerAttached;
+  switch (s.phase) {
+    case 'TRANSIT_OUT': case 'LOI_PENDING':
+      m = totalMass(s);
+      burnP('Trajectory corrections', K.DV_TCM_OUT);
+      burnP('Lunar orbit insertion', site.dvLoi);
+      if (landing) m -= landerMass(s) + lc;
+      burnP('Orbit ops', K.DV_ORBIT_OPS);
+      if (landing) m += lc + samples;
+      burnP('Trans-Earth injection', site.dvTei); burnP('Return corrections', K.DV_TCM_BACK); break;
+    case 'LUNAR_ORBIT':
+      m = csmMass(s) - (landing ? lc : 0);
+      if (landing) burnP('Orbit ops', K.DV_ORBIT_OPS);
+      if (landing) m += lc + samples;
+      burnP('Trans-Earth injection', site.dvTei); burnP('Return corrections', K.DV_TCM_BACK); break;
+    case 'DESCENT': case 'SURFACE':
+      m = csmMass(s) + lc + samples;
+      burnP('Trans-Earth injection', site.dvTei); burnP('Return corrections', K.DV_TCM_BACK); break;
+    case 'LUNAR_ORBIT_POST':
+      m = csmMass(s);
+      burnP('Trans-Earth injection', site.dvTei); burnP('Return corrections', K.DV_TCM_BACK); break;
+    default: break;
+  }
+  return out;
+}
+export function propMarginKg(s: MissionState) { return s.propKg - projectBurns(s).reduce((a, b) => a + b.propKg, 0); }
+
+// ------------------------------------------------------------------ environment geometry
+export function inLunarOrbit(s: MissionState) { return s.phase === 'LUNAR_ORBIT' || s.phase === 'LUNAR_ORBIT_POST' || s.phase === 'DESCENT' || s.phase === 'SURFACE'; }
+export function orbitPhase(s: MissionState) { return ((s.t - s.phaseStart) % K.LLO_PERIOD_S) / K.LLO_PERIOD_S; }
+export function isSunlit(s: MissionState) {
+  if (!inLunarOrbit(s)) return true; // translunar coast: continuous sunlight (eclipses ignored)
+  const ph = ((s.t) % K.LLO_PERIOD_S) / K.LLO_PERIOD_S;
+  return Math.abs(ph - 0.5) > K.LLO_SHADOW_FRACTION / 2;
+}
+export function earthVisible(s: MissionState) {
+  if (!inLunarOrbit(s)) return true;
+  const ph = ((s.t) % K.LLO_PERIOD_S) / K.LLO_PERIOD_S;
+  return Math.abs(ph - K.LLO_LOS_CENTER) > K.LLO_LOS_FRACTION / 2;
+}
+export function groundClear(s: MissionState) {
+  const c = comp(s, 'comms');
+  if (!c || (c.linkAvailability ?? 1) >= 1) return true;
+  return s.weather[Math.floor(s.t / (6 * K.HOUR)) % s.weather.length];
+}
+/** Current downlink rate in Mbps (0 if no link). */
+export function linkRateMbps(s: MissionState): number {
+  const c = comp(s, 'comms');
+  if (!c) return 0;
+  if (!earthVisible(s)) return 0;
+  let rate = c.downlinkMbps ?? 0;
+  const outage = s.t < s.commOutageUntil;
+  if (outage || !groundClear(s)) rate = c.id === 'com_laser' ? (c.backupMbps ?? 0) : outage ? 0 : rate;
+  if (s.timed.some((e) => e.kind === 'linkHalf' && e.at <= s.t)) rate *= 0.5;
+  if (s.commsMode === 'low') rate *= 0.1;
+  return rate;
+}
+
+// ------------------------------------------------------------------ power model
+export interface PowerSnapshot { genW: number; loadW: number; lines: { label: string; w: number }[]; heatW: number; rejectW: number; sunlit: boolean }
+export function powerSnapshot(s: MissionState): PowerSnapshot {
+  const st = s.stats;
+  const conserve = s.powerMode === 'conserve' ? K.CONSERVE_FACTOR : 1;
+  const lines: { label: string; w: number }[] = [
+    { label: 'Avionics & cabin', w: K.BASE_LOAD_W * conserve },
+    { label: 'Crew systems', w: K.CREW_LOAD_W * s.crewOnCsm * conserve },
+    { label: 'Heaters', w: K.HEATER_LOAD_W },
+  ];
+  for (const p of st.parts) {
+    if (!p.powerW || p.onLander || p.slot === 'science') continue;
+    let w = p.powerW;
+    if (p.slot === 'comms' && s.commsMode === 'low') w *= 0.4;
+    if (p.slot === 'lifeSupport' && s.waterRecovery === 0 && p.id === 'ls_regen') w *= 0.3;
+    lines.push({ label: p.short, w });
+  }
+  for (const [id, inst] of Object.entries(s.instruments)) if (inst.on && !inst.failed) lines.push({ label: COMPONENT_BY_ID[id].short, w: COMPONENT_BY_ID[id].powerW ?? 0 });
+  const loadW = lines.reduce((a, l) => a + l.w, 0);
+  const sunlit = isSunlit(s);
+  let genW = 0;
+  if (st.power.genKind === 'solar') genW = sunlit ? st.power.genW * s.solarFactor : 0;
+  else if (st.power.genKind === 'fuelcell') genW = s.reactantWh > 0 ? st.power.genW * s.fuelCellFactor : 0;
+  if (s.t < s.safeModeUntil) genW *= 0.3;
+  return { genW, loadW, lines, heatW: loadW + s.crewOnCsm * K.METABOLIC_HEAT_W, rejectW: st.thermal.rejectW, sunlit };
+}
+
+// ------------------------------------------------------------------ stepping
+export function isCoasting(s: MissionState) {
+  return !s.pending && !s.crewLost && (s.phase === 'TRANSIT_OUT' || s.phase === 'LUNAR_ORBIT' || s.phase === 'LUNAR_ORBIT_POST' || s.phase === 'TRANSIT_BACK' || s.phase === 'FREE_RETURN');
+}
+
+/** Advance one fixed step. `allowEvents=false` is used while the CSM orbits during surface ops. */
+export function step(s: MissionState, dt = K.SIM_DT, allowEvents = true) {
+  if (s.crewLost) return;
+  s.t += dt;
+  const dtH = dt / K.HOUR, dtD = dt / K.DAY;
+  // timed effects
+  for (const e of s.timed.filter((e) => e.at <= s.t && e.kind !== 'linkHalf')) {
+    if (e.kind === 'solarFactor') { s.solarFactor = e.value; log(s, `Solar array output restored to ${Math.round(e.value * 100)}%.`, 'good'); }
+    else if (e.kind === 'fuelCellFactor') { s.fuelCellFactor = e.value; log(s, 'Fuel cell purge complete.', 'good'); }
+    else if (e.kind === 'waterRecovery') { s.waterRecovery = e.value; log(s, 'Water processor repaired: recycling resumed.', 'good'); }
+    else if (e.kind.startsWith('instrumentOn:')) { const id = e.kind.split(':')[1]; if (s.instruments[id] && !s.instruments[id].failed) { s.instruments[id].on = inLunarOrbit(s); } }
+  }
+  s.timed = s.timed.filter((e) => e.at > s.t || e.kind === 'linkHalf');
+
+  // --- power & thermal
+  let snap = powerSnapshot(s);
+  if (snap.heatW > snap.rejectW) {
+    const onInst = Object.entries(s.instruments).filter(([, v]) => v.on);
+    if (onInst.length) { for (const [, v] of onInst) v.on = false; log(s, 'Radiators saturated: instruments switched off to limit cabin heat.', 'warn'); snap = powerSnapshot(s); }
+    if (snap.heatW > snap.rejectW) { s.flags.thermalH += dtH; s.condition -= 1 * dtH; }
+  }
+  let gen = snap.genW;
+  if (s.stats.power.genKind === 'fuelcell' && s.reactantWh > 0) {
+    // fuel cells follow the load (plus battery recharge) up to their maximum output
+    const want = snap.loadW + (s.batteryCapWh - s.batteryWh) / dtH;
+    gen = Math.min(gen, want);
+    s.reactantWh = Math.max(0, s.reactantWh - gen * dtH);
+    s.waterKg += (gen * dtH / 1000) * 0.35; // product water
+  }
+  let next = s.batteryWh + (gen - snap.loadW) * dtH;
+  if (next < 0 && s.autoShed) {
+    const onInst = Object.entries(s.instruments).filter(([, v]) => v.on);
+    if (onInst.length) { for (const [, v] of onInst) v.on = false; log(s, 'Battery depleted: instruments shed automatically.', 'warn'); }
+    if (s.commsMode === 'high') { s.commsMode = 'low'; log(s, 'Battery depleted: comms switched to low-rate.', 'warn'); }
+    if (s.powerMode === 'normal') { s.powerMode = 'conserve'; log(s, 'Battery depleted: conserve mode engaged.', 'warn'); }
+    snap = powerSnapshot(s);
+    next = s.batteryWh + (gen - snap.loadW) * dtH;
+  }
+  if (next < 0) { next = 0; s.flags.brownoutH += dtH; s.condition -= 3 * dtH; }
+  s.batteryWh = Math.min(s.batteryCapWh, next);
+  if (s.batteryCapWh > 0) s.flags.minBatteryFrac = Math.min(s.flags.minBatteryFrac, s.batteryWh / s.batteryCapWh);
+
+  // --- life support (crew aboard the CSM)
+  const n = s.crewOnCsm;
+  s.o2Kg -= n * K.O2_KG_PER_CREW_DAY * (1 - s.o2Recovery) * dtD;
+  s.waterKg -= n * K.WATER_KG_PER_CREW_DAY * (1 - s.waterRecovery) * (s.rationing ? 0.8 : 1) * dtD;
+  s.foodKg -= n * K.FOOD_KG_PER_CREW_DAY * dtD;
+  if (s.rationing) s.condition -= 0.1 * dtH;
+  if (s.powerMode === 'conserve') s.condition -= 0.15 * dtH;
+  if (s.waterKg <= 0) { s.waterKg = 0; s.condition -= 4 * dtH; }
+  if (s.foodKg <= 0) { s.foodKg = 0; s.condition -= 1 * dtH; }
+  if (s.o2Kg <= 0 && n > 0) { s.o2Kg = 0; loseCrew(s, 'Oxygen supply exhausted.'); return; }
+  if (s.powerMode === 'normal' && !s.rationing && s.waterKg > 0 && s.batteryWh > 0) s.condition = Math.min(100, s.condition + 0.05 * dtH);
+  if (s.condition <= 0) { loseCrew(s, 'Crew health failed after prolonged stress.'); return; }
+
+  // --- science data
+  const orbit = inLunarOrbit(s);
+  const add = (src: DataSource, mb: number) => {
+    s.acquiredMB[src] += mb;
+    const total = SOURCES.reduce((a, k) => a + s.storedMB[k], 0);
+    const room = Math.max(0, s.stats.comms.storageMB - total);
+    const kept = Math.min(room, mb);
+    s.storedMB[src] += kept;
+    if (mb > kept) s.lostMB += mb - kept;
+  };
+  for (const [id, inst] of Object.entries(s.instruments)) {
+    if (!inst.on || inst.failed || !orbit) continue;
+    const c = COMPONENT_BY_ID[id];
+    if (id === 'sci_mapcam' && !snap.sunlit) continue; // imaging needs daylight
+    inst.hours += dtH;
+    add(c.scienceTag as DataSource, (c.dataMbps ?? 0) * dt / 8);
+  }
+  // downlink
+  const rate = linkRateMbps(s);
+  let cap = rate * dt / 8;
+  const stored = SOURCES.reduce((a, k) => a + s.storedMB[k], 0);
+  if (cap > 0 && stored > 0) {
+    const f = Math.min(1, cap / stored);
+    for (const k of SOURCES) { const mv = s.storedMB[k] * f; s.storedMB[k] -= mv; s.downMB[k] += mv; }
+    cap = 0;
+  }
+
+  // --- phase timing
+  if (s.phase === 'TRANSIT_OUT' && phaseTime(s) >= K.TRANSIT_OUT_S) {
+    setPhase(s, 'LOI_PENDING');
+    log(s, 'Approaching the Moon. Lunar orbit insertion burn is ready.', 'info');
+  } else if ((s.phase === 'TRANSIT_BACK' && phaseTime(s) >= K.TRANSIT_BACK_S) || (s.phase === 'FREE_RETURN' && phaseTime(s) >= K.FREE_RETURN_S)) {
+    setPhase(s, 'ENTRY');
+    log(s, 'Earth entry interface ahead. Service module separation.', 'info');
+  }
+  s.flags.minPropMarginKg = Math.min(s.flags.minPropMarginKg, propMarginKg(s));
+
+  // --- events
+  if (allowEvents && !s.pending) {
+    const due = s.schedule.find((e) => e.phases.includes(s.phase) && phaseTime(s) >= e.at && !s.eventsSeen.includes(e.id));
+    if (due) {
+      const def = EVENT_BY_ID[due.id];
+      s.eventsSeen.push(due.id);
+      if (def.eligible(s)) { s.pending = def.build(s); log(s, `ALERT: ${s.pending.title}`, 'event'); }
+    }
+  }
+}
+
+/** Run coast steps for a duration (used for bulk time advance). Stops early on events. */
+export function advance(s: MissionState, seconds: number, allowEvents = true) {
+  let left = seconds;
+  while (left > 0 && !s.crewLost && (allowEvents ? !s.pending : true)) {
+    const dt = Math.min(K.SIM_DT, left);
+    step(s, dt, allowEvents);
+    left -= dt;
+    if (s.phase === 'LOI_PENDING' || s.phase === 'ENTRY') break;
+  }
+}
+
+export function resolveEvent(s: MissionState, option: number): string {
+  if (!s.pending) return '';
+  const def = EVENT_BY_ID[s.pending.id];
+  const rng = new Rng(s.rngState ^ Math.floor(s.t));
+  const label = s.pending.options[option]?.label ?? '';
+  const msg = def.resolve(s, option, rng);
+  s.rngState = rng.state;
+  s.decisions.push({ event: s.pending.title, choice: label, t: s.t });
+  log(s, `${s.pending.title}: ${label}. ${msg}`, 'decision');
+  s.pending = null;
+  if (s.condition <= 0) loseCrew(s, 'Crew health failed after the emergency.');
+  return msg;
+}
+
+function loseCrew(s: MissionState, cause: string) {
+  s.crewLost = true;
+  s.lossCause = cause;
+  log(s, `MISSION LOST: ${cause}`, 'bad');
+  setPhase(s, 'COMPLETE');
+}
+
+// ------------------------------------------------------------------ player actions
+export function setInstrument(s: MissionState, id: string, on: boolean) {
+  const inst = s.instruments[id];
+  if (!inst || inst.failed) return false;
+  inst.on = on && inLunarOrbit(s);
+  return inst.on === on;
+}
+
+/** Execute an SM maneuver. Returns ok=false if propellant is insufficient. */
+export function burn(s: MissionState, name: string, dv: number, massKg = totalMass(s)): { ok: boolean; propKg: number; shortKg: number } {
+  const need = propellantForDv(massKg, dv, isp(s));
+  if (need > s.propKg) return { ok: false, propKg: need, shortKg: need - s.propKg };
+  s.propKg -= need;
+  log(s, `${name}: Δv ${Math.round(dv)} m/s, ${Math.round(need)} kg propellant used.`, 'good');
+  return { ok: true, propKg: need, shortKg: 0 };
+}
+
+export function executeLOI(s: MissionState) {
+  if (s.phase !== 'LOI_PENDING') return { ok: false, propKg: 0, shortKg: 0 };
+  const site = SITE_BY_ID[s.design.plan.site];
+  // outbound corrections are folded in at arrival
+  const tcm = burn(s, 'Trajectory corrections', K.DV_TCM_OUT);
+  if (!tcm.ok) return tcm;
+  const r = burn(s, 'Lunar orbit insertion', site.dvLoi);
+  if (r.ok) { setPhase(s, 'LUNAR_ORBIT'); log(s, `Welcome to lunar orbit! ${site.name} passes below every 2 hours.`, 'good'); }
+  return r;
+}
+
+/** Can the spacecraft still get home after LOI? Used to recommend a free-return abort. */
+export function canAffordLOIAndReturn(s: MissionState) { return propMarginKg(s) >= 0; }
+
+export function chooseFreeReturn(s: MissionState) {
+  if (s.phase !== 'LOI_PENDING') return false;
+  burn(s, 'Free-return correction', K.DV_TCM_BACK);
+  // Lander kept attached as a "lifeboat": its battery supplements the CSM
+  if (s.landerAttached) { s.batteryCapWh += s.landerBatteryWh; s.batteryWh += s.landerBatteryWh; log(s, 'Lander powered up as a lifeboat: its batteries join the power budget.', 'info'); }
+  setPhase(s, 'FREE_RETURN');
+  log(s, 'Free-return abort: swinging around the Moon and heading home without landing.', 'warn');
+  return true;
+}
+
+export function beginDescent(s: MissionState) {
+  if (s.phase !== 'LUNAR_ORBIT' || !s.landerAttached) return false;
+  s.crewOnCsm = s.stats.orbitCrew;
+  burn(s, 'CSM orbit trim', K.DV_ORBIT_OPS, csmMass(s));
+  for (const v of Object.values(s.instruments)) v.on = v.on && !v.failed;
+  setPhase(s, 'DESCENT');
+  log(s, `Lander undocked with ${s.stats.landingCrew} crew. Powered descent initiation!`, 'info');
+  return true;
+}
+
+/** Lander mass at the start of the final approach (after automatic braking phase). */
+export function approachState(s: MissionState) {
+  const L = comp(s, 'lander')!;
+  const site = SITE_BY_ID[s.design.plan.site];
+  const m0 = landerMass(s) + s.stats.landingCrew * K.CREW_MASS_KG;
+  const brakeProp = propellantForDv(m0, site.dvDescent - K.DV_FINAL_APPROACH, L.ispS!);
+  return { massKg: m0 - brakeProp, propKg: Math.max(0, s.landerDescentPropKg - brakeProp), thrustN: L.thrustN!, ispS: L.ispS!, hazard: site.hazardDensity, trn: !!s.stats.parts.find((p) => p.id === 'gnc_trn') };
+}
+
+export function applyLanding(s: MissionState, outcome: 'soft' | 'hard' | 'abort' | 'crash', vImpact: number, propLeftKg: number) {
+  s.landing = { attempted: true, outcome, vImpact, propLeftKg, damaged: null };
+  s.landerDescentPropKg = propLeftKg;
+  const tempo = TEMPO_BY_ID[s.design.plan.tempo];
+  void tempo;
+  if (outcome === 'crash') { loseCrew(s, `Lander impacted the surface at ${vImpact.toFixed(1)} m/s.`); return; }
+  if (outcome === 'abort') {
+    // ascent stage fires from low altitude back to orbit and rendezvous
+    s.landerAttached = false;
+    s.crewOnCsm = s.stats.crew;
+    setPhase(s, 'LUNAR_ORBIT_POST');
+    log(s, 'ABORT STAGE! The ascent stage climbed back to orbit and docked. The crew is safe, but there will be no surface operations.', 'warn');
+    return;
+  }
+  if (outcome === 'hard') {
+    s.condition -= 20;
+    const surf = s.stats.parts.filter((p) => p.onLander && p.slot === 'science');
+    if (surf.length) { const rng = new Rng(s.rngState ^ 0x51); const dmg = surf[rng.int(0, surf.length - 1)]; s.rngState = rng.state; s.landing.damaged = dmg.id; log(s, `Hard landing (${vImpact.toFixed(1)} m/s)! The ${dmg.name} was damaged.`, 'bad'); }
+    else log(s, `Hard landing (${vImpact.toFixed(1)} m/s)! Crew shaken but OK.`, 'bad');
+  } else log(s, `Touchdown at ${vImpact.toFixed(1)} m/s. The crew is on the Moon!`, 'good');
+  setPhase(s, 'SURFACE');
+  s.surface = { day: 1, evaUsedToday: 0, hoursOnSurface: 0, done: {}, samplesKg: 0, points: {}, broadcast: false };
+}
+
+/** Ascent from the surface. Fails if crew + samples are too heavy for the ascent stage. */
+export function ascentCheck(s: MissionState, samplesKg = s.surface.samplesKg) {
+  const L = comp(s, 'lander')!;
+  const m0 = L.ascentDryKg! + s.landerAscentPropKg + s.stats.landingCrew * K.CREW_MASS_KG + samplesKg;
+  const dv = deltaV(L.ispS!, m0, m0 - s.landerAscentPropKg);
+  // max sample mass that still allows ascent
+  const ve = L.ispS! * K.G0;
+  const r = Math.exp(K.DV_ASCENT / ve);
+  const maxM0 = s.landerAscentPropKg * r / (r - 1);
+  const maxSamples = Math.max(0, maxM0 - (L.ascentDryKg! + s.landerAscentPropKg + s.stats.landingCrew * K.CREW_MASS_KG));
+  return { dv, req: K.DV_ASCENT, ok: dv >= K.DV_ASCENT, maxSamplesKg: maxSamples };
+}
+
+export function liftoff(s: MissionState): { ok: boolean; message: string } {
+  if (s.phase !== 'SURFACE') return { ok: false, message: 'Not on the surface.' };
+  const a = ascentCheck(s);
+  if (!a.ok) return { ok: false, message: `Too heavy! The ascent stage can lift at most ${Math.floor(a.maxSamplesKg)} kg of samples.` };
+  s.landerAttached = false;
+  s.samplesAboardKg = s.surface.samplesKg;
+  s.crewOnCsm = s.stats.crew;
+  setPhase(s, 'LUNAR_ORBIT_POST');
+  log(s, `Liftoff! Ascent stage reached orbit and docked with ${Math.round(s.samplesAboardKg)} kg of samples.`, 'good');
+  return { ok: true, message: 'Ascent successful.' };
+}
+
+export function jettisonSamples(s: MissionState, kg: number) { s.surface.samplesKg = Math.max(0, s.surface.samplesKg - kg); }
+
+export function executeTEI(s: MissionState) {
+  if (s.phase !== 'LUNAR_ORBIT_POST' && s.phase !== 'LUNAR_ORBIT') return { ok: false, propKg: 0, shortKg: 0 };
+  const aborting = s.phase === 'LUNAR_ORBIT';
+  if (aborting && s.landerAttached) { s.landerAttached = false; log(s, 'Lander jettisoned unused to save propellant.', 'warn'); }
+  const site = SITE_BY_ID[s.design.plan.site];
+  const r = burn(s, 'Trans-Earth injection', site.dvTei);
+  if (!r.ok) {
+    s.flags.stranded = true;
+    loseCrew(s, `Not enough propellant for trans-Earth injection (short ${Math.round(r.shortKg)} kg). The crew could not return.`);
+    return r;
+  }
+  burn(s, 'Return corrections', K.DV_TCM_BACK);
+  for (const v of Object.values(s.instruments)) v.on = false;
+  setPhase(s, 'TRANSIT_BACK');
+  log(s, 'Trans-Earth injection complete: heading home to the Pacific!', 'good');
+  return r;
+}
+
+/** Entry: heat-shield effective margin vs heat-load dispersion (from earlier anomalies). */
+export function performEntry(s: MissionState) {
+  if (s.phase !== 'ENTRY') return { ok: false, margin: 0, load: 0 };
+  const margin = s.stats.heatShield.rating * (8000 / (s.stats.heatShield.entryMassKg - s.stats.lander.sampleCapacityKg + s.samplesAboardKg));
+  const load = s.entryDispersion;
+  const ok = margin >= load;
+  s.flags.entryOk = ok;
+  if (!ok) { loseCrew(s, 'Heat shield overwhelmed during an off-nominal entry.'); return { ok, margin, load }; }
+  setPhase(s, 'COMPLETE');
+  log(s, 'Splashdown in the Pacific! Recovery ship on station. Welcome home!', 'good');
+  return { ok, margin, load };
+}
+
+export function securedMB(s: MissionState, src: DataSource) {
+  // data on the recorder returns with the crew if they get home
+  return s.downMB[src] + (s.crewLost ? 0 : s.storedMB[src]);
+}
+export { SOURCES };
