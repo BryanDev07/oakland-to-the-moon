@@ -60,7 +60,7 @@ export class HangarScene extends Phaser.Scene {
       const label = txt(this, 22, y + 2, c.label, { color: C.text });
       const status = this.add.image(90, y + 0.5, 'icons', iconFrame('ok')).setOrigin(0, 0);
       bg.on('pointerover', () => { bg.setFillStyle(0x2a4c98, 0.5); audio.sfx('move'); const s = SLOTS.find((x) => x.id === c.id); Tooltip.show(this, s ? s.help : 'Rocket, landing site, crew size, surface stay and operations tempo.', { x: 108, y }); });
-      bg.on('pointerout', () => { bg.setFillStyle(0x2a4c98, this.cat === c.id ? 0.85 : 0); Tooltip.hide(); });
+      bg.on('pointerout', () => { Tooltip.hide(); this.refresh(); });
       bg.on('pointerup', () => { audio.sfx('select'); this.selectCat(c.id); });
       this.catRows.push({ cat: c.id, bg, status, label });
     });
@@ -196,7 +196,10 @@ export class HangarScene extends Phaser.Scene {
         if (slot.multi) st = culpritSlots[r.cat] ?? ((r.cat === 'science' && this.design.science.length === 0) ? 'warn' : 'ok');
       }
       r.status.setFrame(iconFrame(st));
-      r.bg.setFillStyle(0x2a4c98, this.cat === r.cat ? 0.85 : 0);
+      this.tweens.killTweensOf(r.status);
+      r.status.setAlpha(1);
+      if (st === 'fail') this.tweens.add({ targets: r.status, alpha: 0.25, duration: 420, yoyo: true, repeat: -1 });
+      r.bg.setFillStyle(this.cat === r.cat ? 0x2a4c98 : st === 'fail' ? 0x7a1626 : 0x2a4c98, this.cat === r.cat ? 0.85 : st === 'fail' ? 0.45 : 0);
       r.label.setTint(this.cat === r.cat ? C.gold2 : C.text);
     }
   }
