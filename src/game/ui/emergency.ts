@@ -40,7 +40,8 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
   let y = 10;
   const line = (s2: string, color: number, dy = 2) => { const t = txt(scene, x, y, s2, { color, size: BODY, maxWidth: w }); c.add(t); y += t.height + dy; return t; };
   c.add(txt(scene, W / 2, y, ev.title, { align: 'center', color: C.gold2, size: BODY, maxWidth: w })); y += 18;
-  if (ev.stage) line(`${ev.stage}  ·  ${ev.real ? 'This really happened' : ev.scenario ? 'Scenario (made up, realistic)' : ''}`, COL.tag);
+  // spec tab 8: cards 3, 6, 9, 10, 14, 15 are scenarios; card 13 is a real effect (contact lost behind the Moon)
+  if (ev.stage) line(`${ev.stage}  ·  ${ev.real ? 'This really happened' : ev.scenario ? 'Scenario (made up, realistic)' : 'Real effect'}`, COL.tag);
   const body = line(ev.text, COL.text, 3);
   if (ev.hint) line(`Hint: ${ev.hint}`, COL.hint, 3);
   // options, then the highlighted option's Good / Bad lines
