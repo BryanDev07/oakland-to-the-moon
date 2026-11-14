@@ -71,7 +71,7 @@ describe('desk checking and calculator', () => {
   it('the Final Results board covers rocket, speed, Moon burns, supplies, power/data/signal, shield and money', () => {
     const { s } = sheetsFor();
     const board = resultsBoard(REFERENCE_DESIGN, s);
-    expect(board.map((b) => b.section)).toEqual(['ROCKET', 'SPEED', 'MOON BURNS', 'CREW SUPPLIES', 'POWER, DATA, SIGNAL', 'HEAT SHIELD + MONEY']);
+    expect(board.map((b) => b.section)).toEqual(['ROCKET', 'SPEED', 'FUEL (YOURS VS SUGGESTED)', 'MOON BURNS', 'CREW SUPPLIES', 'POWER AND DATA', 'SIGNAL', 'HEAT SHIELD', 'MONEY']);
     expect(board.flatMap((b) => b.rows).length).toBeGreaterThan(12);
   });
 });

@@ -453,31 +453,69 @@ function moreSheets(d: Design, s: DesignStats, x: Shown): Sheet[] {
   return sheets;
 }
 
-/** Final Results board rows: every answer in one place (game-computed where no sheet exists yet). */
-export function resultsBoard(_d: Design, s: DesignStats): { section: string; rows: { label: string; value: string; ok?: boolean }[] }[] {
-  const S = s.spec!, R = S.rocket;
+/**
+ * Final Results board (spec tab 6): every answer in one place, in the spec's sections:
+ * rocket, speed, fuel, Moon burns, crew supplies, power and data, signal, heat shield, money.
+ */
+export function resultsBoard(d: Design, s: DesignStats): { section: string; rows: { label: string; value: string; ok?: boolean }[] }[] {
+  const S = s.spec!, R = S.rocket, b = S.rocketBuild;
   const L = LIFE_SUPPORT_LB, crew = s.crew, days = s.missionDays;
-  const contact = S.orbit.contactFraction.v;
-  const miles = SIGNAL_DISTANCES[S.orbit.id === 'NRHO' ? 4 : 1].miles.v;
+  const row = signalRow(S.orbit.id);
   const left = S.budgetM - s.costM;
-  const top = s.costLines.slice().sort((a, b) => b.m - a.m).slice(0, 3);
+  const lines = s.costLines.slice().sort((a, c) => c.m - a.m);
+  const sun = S.orbit.sunFraction.v, darkH = S.orbit.periodH.v * (1 - sun);
+  const eclipseWh = s.power.peakLoadW * darkH * BATTERY_MARGIN.v;
+  const sug = (stage: 1 | 2) => settledFuel(d, stage, stage === 1 ? b.stage1.fuelLb : b.stage2.fuelLb);
+  const s1 = sug(1), s2 = sug(2);
+  const sh = shieldMath(S.capsule.shieldMph);
   return [
-    { section: 'ROCKET', rows: [{ label: 'Weight at liftoff', value: `${fmt(kgToLb(R.liftoffKg))} lb` }, { label: 'Total push', value: `${fmt(R.pushN)} N` }, { label: 'TWR', value: R.twr.toFixed(2), ok: R.liftsOff }] },
-    { section: 'SPEED', rows: [...R.pieces.map((p) => ({ label: `V ${p.name.toLowerCase()}`, value: `${fmt(p.dv)} m/s` })), { label: `Total vs ${fmt(MISSION_DV.toMoon)}`, value: `${fmt(R.dvTotal)} m/s (${R.spare >= 0 ? '+' : ''}${fmt(R.spare)})`, ok: R.reachesMoon }] },
+    { section: 'ROCKET', rows: [
+      { label: 'Weight at liftoff', value: `${fmt(kgToLb(R.liftoffKg))} lb` },
+      { label: 'Total push', value: `${fmt(R.pushN)} N` },
+      { label: 'TWR (>= 1.2)', value: R.twr.toFixed(2), ok: R.liftsOff },
+    ] },
+    { section: 'SPEED', rows: [
+      ...R.pieces.map((p) => ({ label: `V ${p.name.toLowerCase()}`, value: `${fmt(p.dv)} m/s` })),
+      { label: `Total vs ${fmt(MISSION_DV.toMoon)}`, value: `${fmt(R.dvTotal)} m/s`, ok: R.reachesMoon },
+      { label: 'Spare speed', value: `${R.spare >= 0 ? '+' : ''}${fmt(R.spare)} m/s`, ok: R.spare >= 0 },
+    ] },
+    { section: 'FUEL (YOURS VS SUGGESTED)', rows: [
+      { label: 'Stage 1', value: `${fmt(b.stage1.fuelLb)} lb vs ${s1 ? `${fmt(s1)} lb` : 'no amount works'}`, ok: s1 !== null && b.stage1.fuelLb >= s1 * 0.99 },
+      { label: 'Stage 2', value: `${fmt(b.stage2.fuelLb)} lb vs ${s2 ? `${fmt(s2)} lb` : 'no amount works'}`, ok: s2 !== null && b.stage2.fuelLb >= s2 * 0.99 },
+    ] },
     { section: 'MOON BURNS', rows: [
-      { label: `Capsule in + home (${S.orbit.id})`, value: `${fmt(S.capsuleReturn.dvLeft)} / ${fmt(S.capsuleReturn.need)} m/s home`, ok: S.capsuleReturn.pass },
-      ...(s.lander.present ? [{ label: 'Lander down', value: `${fmt(s.lander.descentDvAvail)} / ${fmt(s.lander.descentDvReq)} m/s`, ok: s.lander.descentDvAvail >= s.lander.descentDvReq }, { label: 'Lander up', value: `${fmt(s.lander.ascentDvAvail)} / ${fmt(s.lander.ascentDvReq)} m/s`, ok: s.lander.ascentDvAvail >= s.lander.ascentDvReq }] : []),
+      { label: `Capsule in (${S.orbit.id}, ${S.orbit.loi.v} m/s)`, value: `${fmt(kgToLb(S.capsuleReturn.usedInKg))} lb used`, ok: S.capsuleReturn.leftKg >= 0 },
+      { label: `Capsule home (${S.orbit.tei.v} m/s)`, value: `${fmt(S.capsuleReturn.dvLeft)} m/s left`, ok: S.capsuleReturn.pass },
+      ...(s.lander.present ? [
+        { label: 'Lander down', value: `${fmt(s.lander.descentDvAvail)} / ${fmt(s.lander.descentDvReq)} m/s`, ok: s.lander.descentDvAvail >= s.lander.descentDvReq },
+        { label: 'Lander up', value: `${fmt(s.lander.ascentDvAvail)} / ${fmt(s.lander.ascentDvReq)} m/s`, ok: s.lander.ascentDvAvail >= s.lander.ascentDvReq },
+      ] : []),
     ] },
-    { section: 'CREW SUPPLIES', rows: [{ label: `O2 / drink / hygiene / food`, value: `${fmt(crew * days * L.oxygen.v)} / ${fmt(crew * days * L.drinkingWater.v)} / ${fmt(crew * days * L.hygieneWater.v)} / ${fmt(crew * days * L.food.v)} lb` }, { label: 'Total', value: `${fmt(crew * days * 14.97)} lb` }] },
-    { section: 'POWER, DATA, SIGNAL', rows: [
+    { section: 'CREW SUPPLIES', rows: [
+      { label: 'Oxygen', value: `${fmt(crew * days * L.oxygen.v)} lb` },
+      { label: 'Drinking water', value: `${fmt(crew * days * L.drinkingWater.v)} lb` },
+      { label: 'Hygiene water', value: `${fmt(crew * days * L.hygieneWater.v)} lb` },
+      { label: 'Food', value: `${fmt(crew * days * L.food.v)} lb` },
+      { label: `Total (${crew} crew x ${fmt(days, 1)} d)`, value: `${fmt(crew * days * (L.oxygen.v + L.drinkingWater.v + L.hygieneWater.v + L.food.v))} lb` },
+    ] },
+    { section: 'POWER AND DATA', rows: [
       { label: 'Watts made vs used', value: `${fmt(s.power.orbitAvgGenW)} / ${fmt(s.power.peakLoadW)} W`, ok: s.power.orbitAvgGenW >= s.power.nominalLoadW },
-      { label: 'MB per day home', value: `${fmt(mbPerDay(s.comms.mbps * 1000, contact))} / ${fmt(S.data.needMbPerDay)} MB`, ok: S.data.mbPerDay >= S.data.needMbPerDay },
-      { label: 'Signal delay', value: `${fmt(miles)} mi = ${signalDelayS(miles).toFixed(2)} s` },
+      { label: 'Battery vs dark need', value: `${fmt(s.power.batteryWh)} / ${fmt(eclipseWh)} Wh`, ok: s.power.batteryWh >= eclipseWh },
+      { label: 'MB per day home', value: `${fmt(S.data.mbPerDay)} / ${fmt(S.data.needMbPerDay)} MB`, ok: S.data.mbPerDay >= S.data.needMbPerDay },
     ] },
-    { section: 'HEAT SHIELD + MONEY', rows: [
-      { label: 'Shield health', value: `${Math.round(S.shieldHealth * 100)}%`, ok: S.shieldHealth >= 0.9 },
-      { label: 'Budget / spent / left', value: `${fmtUsdM(S.budgetM)} / ${fmtUsdM(s.costM)} / ${fmtUsdM(left)}`, ok: left > 0 },
-      { label: 'Biggest costs', value: top.map((l) => l.label.split(' (')[0]).join(', ') },
+    { section: 'SIGNAL', rows: [
+      { label: 'Miles used', value: `${fmt(row.miles.v)} mi (${row.where.split(',')[0]})` },
+      { label: 'Delay one way', value: `${signalDelayS(row.miles.v).toFixed(2)} s` },
+    ] },
+    { section: 'HEAT SHIELD', rows: [
+      { label: `Health at re-entry (${fmt(S.capsule.shieldMph)} mph)`, value: `${Math.round(sh.health)}% ${sh.result}`, ok: sh.health >= 90 },
+    ] },
+    { section: 'MONEY', rows: [
+      { label: 'Budget', value: fmtUsdM(S.budgetM) },
+      { label: 'Spent', value: fmtUsdM(s.costM) },
+      { label: 'Left', value: fmtUsdM(left), ok: left > 0 },
+      ...lines.slice(0, 4).map((l) => ({ label: `  ${l.label.split(' (')[0]}`, value: fmtUsdM(l.m) })),
+      ...(lines.length > 4 ? [{ label: `  ${lines.length - 4} more items`, value: fmtUsdM(lines.slice(4).reduce((a, l) => a + l.m, 0)) }] : []),
     ] },
   ];
 }

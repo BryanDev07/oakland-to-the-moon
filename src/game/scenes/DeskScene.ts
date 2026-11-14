@@ -138,7 +138,7 @@ export class DeskScene extends Phaser.Scene {
   say(t: string, color: number) { this.feedbackText = t; this.feedbackColor = color; }
   next() {
     audio.sfx('select');
-    if (this.idx >= this.sheets.length) { this.boardPage = 1 - this.boardPage; this.render(); return; } // board: flip page
+    if (this.idx >= this.sheets.length) { this.boardPage = (this.boardPage + 1) % this.boardPages(); this.render(); return; } // board: next page
     this.idx = Math.min(this.sheets.length, this.idx + 1);
     this.calc = ''; this.display.setText('0'); this.feedbackText = '';
     this.loadProgress();
@@ -154,6 +154,7 @@ export class DeskScene extends Phaser.Scene {
     this.say(`Done: ${a.label.replace('USE THIS: ', '')}. Rocket now ${fmt(this.stats.spec!.rocket.dvTotal)} m/s.`, OK);
     this.render();
   }
+  boardPages() { return Math.ceil(resultsBoard(store.design, this.stats).length / 3); }
   toHangar() { fadeTo(this, 'Hangar'); }
   launch() { fadeTo(this, 'Review'); }
 
@@ -203,12 +204,13 @@ export class DeskScene extends Phaser.Scene {
   }
 
   renderBoard() {
-    // two pages so every row fits the paper at full size
+    // three sections per page so every row fits the paper at full size
     const all = resultsBoard(store.design, this.stats);
-    const board = this.boardPage === 0 ? all.slice(0, 3) : all.slice(3);
+    const pages = Math.ceil(all.length / 3);
+    const board = all.slice(this.boardPage * 3, this.boardPage * 3 + 3);
     let y = 10;
     const col = (x: number, s: string, color = INK, w = 140) => { const t = txt(this, x, y, s, { color, maxWidth: w, shadow: false }); this.paper.add(t); return t; };
-    col(PX, `FINAL RESULTS BOARD  (${this.boardPage + 1}/2)`, BLUE, PW); y += 13;
+    col(PX, `FINAL RESULTS BOARD  (${this.boardPage + 1}/${pages})`, BLUE, PW); y += 13;
     for (const sec of board) {
       col(PX, sec.section, BLUE, PW); y += 11;
       for (const r of sec.rows) {
