@@ -111,7 +111,10 @@ export class Meter extends Phaser.GameObjects.Container {
     g.fillStyle(0xffffff, 0.35).fillRect(1, y + 1, Math.round((w - 2) * f), 1);
     for (let i = 1; i < 10; i++) g.fillStyle(C.ink, 0.5).fillRect(Math.round((w * i) / 10), y + 1, 1, 4);
     if (marker !== undefined) g.fillStyle(C.white).fillRect(Math.round(1 + (w - 2) * Math.max(0, Math.min(1, marker))), y - 1, 1, 8);
-    this.valueText.setText(value).setTint(c === C.red ? C.red : c === C.orange ? C.orange : C.text);
+    this.valueText.setText(value).setFontSize(10).setTint(c === C.red ? C.red : c === C.orange ? C.orange : C.text);
+    // never run into the label: trim at full size (the pixel font is unreadable when scaled down)
+    const room = this.w - (this.labelText.x + this.labelText.width + 4);
+    while (this.valueText.width > room && this.valueText.text.length > 3) this.valueText.setText(this.valueText.text.slice(0, -2) + '…');
     return this;
   }
 }
@@ -356,4 +359,5 @@ export function fmtTime(sec: number) {
   const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
   return `${String(d).padStart(2, '0')}d ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
-export const kg = (v: number) => `${Math.round(v).toLocaleString('en-US')} kg`;
+/** Weight for display: the player sees lb (spec A3); internal math stays in kg. */
+export const kg = (v: number) => `${Math.round(v / 0.45359237).toLocaleString('en-US')} lb`;

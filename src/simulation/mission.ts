@@ -12,7 +12,7 @@ import { deltaV, propellantForDv } from './rocket';
 import { analyzeDesign } from './spacecraft';
 import { missionDv, orbitGeom, specOf } from './specModel';
 import { shieldHealth, shieldResult } from './formulas';
-import { fmt } from './units';
+import { fmt, fmtLb } from './units';
 import type { DataSource, LogEntry, MissionState, Phase } from './types';
 
 export type { MissionState, Phase } from './types';
@@ -62,7 +62,7 @@ export function createMission(design: Design, seed: number): MissionState {
     s.flags.tliTrimDv = 45;
     const need = propellantForDv(totalMass(s), 45, isp(s));
     s.propKg = Math.max(0, s.propKg - need);
-    log(s, `${lv.name} upper stage underperformed by 45 m/s. The service module burned ${Math.round(need)} kg of propellant to complete trans-lunar injection.`, 'warn');
+    log(s, `${lv.name} upper stage underperformed by 45 m/s. The service module burned ${fmtLb(need)} of propellant to complete trans-lunar injection.`, 'warn');
   }
   // Artemis-style: the lander flew on its own rocket and pays its own way into the halo orbit.
   const dv0 = missionDv(d);
@@ -407,7 +407,7 @@ export function burn(s: MissionState, name: string, dv: number, massKg = totalMa
   const need = propellantForDv(massKg, dv, isp(s));
   if (need > s.propKg) return { ok: false, propKg: need, shortKg: need - s.propKg };
   s.propKg -= need;
-  log(s, `${name}: Δv ${Math.round(dv)} m/s, ${Math.round(need)} kg propellant used.`, 'good');
+  log(s, `${name}: Δv ${Math.round(dv)} m/s, ${fmtLb(need)} propellant used.`, 'good');
   return { ok: true, propKg: need, shortKg: 0 };
 }
 
@@ -508,12 +508,12 @@ export function ascentCheck(s: MissionState, samplesKg = s.surface.samplesKg) {
 export function liftoff(s: MissionState): { ok: boolean; message: string } {
   if (s.phase !== 'SURFACE') return { ok: false, message: 'Not on the surface.' };
   const a = ascentCheck(s);
-  if (!a.ok) return { ok: false, message: `Too heavy! The ascent stage can lift at most ${Math.floor(a.maxSamplesKg)} kg of samples.` };
+  if (!a.ok) return { ok: false, message: `Too heavy! The ascent stage can lift at most ${fmtLb(a.maxSamplesKg)} of samples.` };
   s.landerAttached = false;
   s.samplesAboardKg = s.surface.samplesKg;
   s.crewOnCsm = s.stats.crew;
   setPhase(s, 'LUNAR_ORBIT_POST');
-  log(s, `Liftoff! Ascent stage reached orbit and docked with ${Math.round(s.samplesAboardKg)} kg of samples.`, 'good');
+  log(s, `Liftoff! Ascent stage reached orbit and docked with ${fmtLb(s.samplesAboardKg)} of samples.`, 'good');
   dock(s, 'Rendezvous and docking with the capsule');
   return { ok: true, message: 'Ascent successful.' };
 }
@@ -529,7 +529,7 @@ export function executeTEI(s: MissionState) {
   const r = burn(s, 'Trans-Earth injection', dv.tei);
   if (!r.ok) {
     s.flags.stranded = true;
-    loseCrew(s, `Not enough propellant for trans-Earth injection (short ${Math.round(r.shortKg)} kg). The crew could not return.`);
+    loseCrew(s, `Not enough propellant for trans-Earth injection (short ${fmtLb(r.shortKg)}). The crew could not return.`);
     return r;
   }
   burn(s, 'Return corrections', dv.tcmBack);

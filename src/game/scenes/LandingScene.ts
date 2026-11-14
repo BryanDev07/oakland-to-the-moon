@@ -8,6 +8,7 @@ import { MOON_G } from '../../simulation/constants';
 import { massFlow } from '../../simulation/rocket';
 import { SITE_BY_ID } from '../../data/mission';
 import { showEmergency } from '../ui/emergency';
+import { fmtLb } from '../../simulation/units';
 
 const PX = 3; // pixels per metre
 const BASE = 1750; // screen y of terrain height 0
@@ -104,7 +105,7 @@ export class LandingScene extends Phaser.Scene {
     const hoverS = ap.propKg / massFlow(ap.massKg * MOON_G, ap.ispS);
     modal(this, {
       title: 'FINAL APPROACH — YOU HAVE CONTROL',
-      text: `Automatic braking is complete: 520 m above ${site.name}.\nPropellant for the approach: ${Math.round(ap.propKg)} kg (≈${Math.round(hoverS)} s of hover).\n${trn ? 'Terrain-relative navigation is mapping hazards: SAFE ZONES are marked in green.' : 'No hazard lidar: you will only spot boulders below ~110 m. Look for flat ground!'}\nTouch down under 3 m/s on flat ground.`,
+      text: `Automatic braking is complete: 520 m above ${site.name}.\nPropellant for the approach: ${fmtLb(ap.propKg)} (≈${Math.round(hoverS)} s of hover).\n${trn ? 'Terrain-relative navigation is mapping hazards: SAFE ZONES are marked in green.' : 'No hazard lidar: you will only spot boulders below ~110 m. Look for flat ground!'}\nTouch down under 3 m/s on flat ground.`,
       options: [{ label: 'Fly it myself', detail: 'Thrust to slow down, tilt to move sideways.' }, { label: 'Engage autopilot', detail: 'Guidance flies; take over any time.' }],
       onChoose: (i) => { this.started = true; this.setAuto(i === 1); audio.loop('thrust', 0.4); toast(this, 'CAPCOM Sam', 'You are GO for landing. Watch your vertical speed and fuel.', 'portrait_capcom', 3500); },
     });
@@ -208,7 +209,7 @@ export class LandingScene extends Phaser.Scene {
     const hoverS = L.propKg / massFlow(L.massKg * MOON_G, L.ispS);
     const vsWarn = vs < -Math.max(3, h * 0.15) ? ' !' : '';
     this.hud.setText(`ALT ${h.toFixed(0).padStart(4)} m\nV/S ${vs.toFixed(1).padStart(5)} m/s${vsWarn}\nH/S ${hs.toFixed(1).padStart(5)} m/s\n${this.auto ? 'AUTOPILOT' : 'MANUAL'}  ${L.trn ? 'TRN: ON' : 'TRN: N/A'}`);
-    this.fuel.set(L.propKg / Math.max(1, L.propStartKg), `${Math.round(hoverS)} s`);
+    this.fuel.set(L.propKg / Math.max(1, L.propStartKg), `${fmtLb(L.propKg)} · ${Math.round(hoverS)} s`); // descent fuel in lb
     this.thr.set(L.throttle, `${Math.round(L.throttle * 100)}%`, C.blue);
     // call-outs
     let m = '';
@@ -248,7 +249,7 @@ export class LandingScene extends Phaser.Scene {
     store.saveMission();
     const titles = { soft: 'TOUCHDOWN! THE TOWN HAS LANDED!', hard: 'HARD LANDING', abort: 'LANDING ABORTED', crash: 'LANDING FAILURE' };
     const texts = {
-      soft: `Touchdown at ${L.vImpact.toFixed(1)} m/s with ${Math.round(L.propKg)} kg of propellant left. ${L.trn ? 'The hazard lidar found a safe spot.' : 'Nice flying on visual alone!'}`,
+      soft: `Touchdown at ${L.vImpact.toFixed(1)} m/s with ${fmtLb(L.propKg)} of propellant left. ${L.trn ? 'The hazard lidar found a safe spot.' : 'Nice flying on visual alone!'}`,
       hard: `Touchdown at ${L.vImpact.toFixed(1)} m/s${L.onHazard ? ' on rough ground' : ''}. The crew is shaken${s.landing.damaged ? ' and some equipment was damaged' : ''}. Lesson: slow down earlier, or let hazard detection pick flat ground.`,
       abort: 'The ascent stage fired and carried the crew back to orbit. Everyone is safe, but there will be no moonwalk. Lesson: more descent propellant margin buys hover time.',
       crash: `Impact at ${L.vImpact.toFixed(1)} m/s. The mission is lost. Lesson: keep vertical speed under 3 m/s near the ground, and trust the autopilot or abort when fuel runs low.`,

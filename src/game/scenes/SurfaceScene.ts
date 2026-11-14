@@ -4,6 +4,7 @@ import { store } from '../../state/store';
 import { Button, C, crt, Dialogue, fadeIn, fadeTo, gearButton, H, iconFrame, Meter, modal, panel, toast, txt, W } from '../ui/ui';
 import * as Sim from '../../simulation/mission';
 import { showEmergency } from '../ui/emergency';
+import { fmt, fmtLb, kgToLb } from '../../simulation/units';
 import { availableActivities, doActivity, restUntilNextDay, surfaceStatus } from '../../simulation/surface';
 import type { MissionState } from '../../simulation/types';
 
@@ -90,7 +91,7 @@ export class SurfaceScene extends Phaser.Scene {
   refresh() {
     const s = this.s;
     const st = surfaceStatus(s);
-    this.status.setText(`DAY ${s.surface.day}/${s.design.plan.stayDays}   EVA LEFT TODAY ${Math.max(0, st.evaLeftToday).toFixed(1)} h   SAMPLES ${s.surface.samplesKg}/${s.stats.lander.sampleCapacityKg} kg\nSCIENCE ${Object.values(s.surface.points).reduce((a, b) => a + b, 0).toFixed(0)} pts   CREW ${Math.round(s.condition)}%   ${s.landing.damaged ? 'DAMAGED: ' + s.landing.damaged.replace('sci_', '') : ''}`);
+    this.status.setText(`DAY ${s.surface.day}/${s.design.plan.stayDays}   EVA LEFT TODAY ${Math.max(0, st.evaLeftToday).toFixed(1)} h   SAMPLES ${fmt(kgToLb(s.surface.samplesKg))}/${fmtLb(s.stats.lander.sampleCapacityKg)}\nSCIENCE ${Object.values(s.surface.points).reduce((a, b) => a + b, 0).toFixed(0)} pts   CREW ${Math.round(s.condition)}%   ${s.landing.damaged ? 'DAMAGED: ' + s.landing.damaged.replace('sci_', '') : ''}`);
     const a = st.ascent;
     this.ascent.set(Math.min(1, a.dv / (a.req * 1.25)), `${Math.round(a.dv)} / ${a.req} m/s${a.ok ? '' : ' TOO HEAVY'}`, a.ok ? (a.dv < a.req * 1.03 ? C.orange : C.green) : C.red, 1 / 1.25);
     this.battery.set(st.landerBatteryWh / st.landerBatteryCap, `${Math.round((st.landerBatteryWh / st.landerBatteryCap) * 100)}%`);
@@ -100,10 +101,10 @@ export class SurfaceScene extends Phaser.Scene {
       const y = 17 + i * 23;
       if (y > 196) return;
       const label = `${av.a.name}`;
-      const b = new Button(this, 334, y, label, () => this.act(av.a.id), { w: 140, h: 22, tooltip: `${av.a.desc}\n${av.a.hours} h EVA${av.a.points ? `, +${av.a.points} science` : ''}${av.a.sampleKg ? `, +${av.a.sampleKg} kg samples` : ''}.${av.ok ? '' : '\nUNAVAILABLE: ' + av.reason}\n\nWHY: ${av.a.learn}` });
+      const b = new Button(this, 334, y, label, () => this.act(av.a.id), { w: 140, h: 22, tooltip: `${av.a.desc}\n${av.a.hours} h EVA${av.a.points ? `, +${av.a.points} science` : ''}${av.a.sampleKg ? `, +${fmtLb(av.a.sampleKg)} of samples` : ''}.${av.ok ? '' : '\nUNAVAILABLE: ' + av.reason}\n\nWHY: ${av.a.learn}` });
       b.label.setOrigin(0, 0).setX(16).setY(1).setTint(av.ok ? C.white : C.dim);
       b.add(this.add.image(3, 3, 'icons', iconFrame(av.ok ? av.a.icon : 'lock')).setOrigin(0, 0));
-      b.add(txt(this, 16, 11, av.ok ? `${av.a.hours} h${av.a.points ? `  +${av.a.points} sci` : ''}${av.a.sampleKg ? `  +${av.a.sampleKg} kg` : ''}` : av.reason, { color: av.ok ? C.teal : C.orange }));
+      b.add(txt(this, 16, 11, av.ok ? `${av.a.hours} h${av.a.points ? `  +${av.a.points} sci` : ''}${av.a.sampleKg ? `  +${fmtLb(av.a.sampleKg)}` : ''}` : av.reason, { color: av.ok ? C.teal : C.orange }));
       if (!av.ok) b.setDisabled(true);
       this.list.add(b);
     });
@@ -155,15 +156,15 @@ export class SurfaceScene extends Phaser.Scene {
       const leave = Math.ceil(s.surface.samplesKg - a.maxSamplesKg);
       modal(this, {
         title: 'ASCENT STAGE TOO HEAVY', alert: true,
-        text: `With ${s.surface.samplesKg} kg of samples the ascent stage reaches only ${Math.round(a.dv)} of the ${a.req} m/s needed for orbit. The rocket equation is unforgiving: you must leave ${leave} kg behind.`,
+        text: `With ${fmtLb(s.surface.samplesKg)} of samples the ascent stage reaches only ${Math.round(a.dv)} of the ${a.req} m/s needed for orbit. The rocket equation is unforgiving: you must leave ${fmtLb(leave)} behind.`,
         learn: 'Δv = Isp·g0·ln(m0/mf): extra payload raises both m0 and mf, cutting Δv.',
-        options: [{ label: `Leave ${leave} kg of samples` }, { label: 'Cancel' }],
+        options: [{ label: `Leave ${fmtLb(leave)} of samples` }, { label: 'Cancel' }],
         onChoose: (i) => { if (i === 0) { Sim.jettisonSamples(s, leave); this.refresh(); this.liftoff(); } },
       });
       return;
     }
     modal(this, {
-      title: 'LIFT OFF?', text: `Leave the surface with ${s.surface.samplesKg} kg of samples? Ascent margin: ${Math.round(a.dv - a.req)} m/s. Remaining EVA time will be lost.`,
+      title: 'LIFT OFF?', text: `Leave the surface with ${fmtLb(s.surface.samplesKg)} of samples? Ascent margin: ${Math.round(a.dv - a.req)} m/s. Remaining EVA time will be lost.`,
       options: [{ label: 'Lift off!' }, { label: 'Stay a bit longer' }],
       onChoose: (i) => { if (i === 0) this.doLiftoff(); },
     });

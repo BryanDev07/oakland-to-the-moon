@@ -23,7 +23,7 @@ export interface ReviewCheck {
 export interface ReviewResult { stats: DesignStats; checks: ReviewCheck[]; blocking: number; warnings: number; go: boolean }
 
 const kg = (v: number) => (SPEC_MODEL ? fmtLb(v) : `${Math.round(v).toLocaleString('en-US')} kg`); // player sees lb (spec A3)
-const kw = (w: number) => `${(w / 1000).toFixed(2)} kW`;
+const kw = (w: number) => (SPEC_MODEL ? `${Math.round(w).toLocaleString('en-US')} W` : `${(w / 1000).toFixed(2)} kW`);
 const pct = (f: number) => `${(f * 100).toFixed(1)}%`;
 
 /** Ids of the heaviest selectable components (for mass/cost blame). */
@@ -121,8 +121,8 @@ export function reviewDesign(d: Design): ReviewResult {
   checks.push({
     id: 'battery', title: 'Battery reserves', icon: 'battery',
     status: !eclipseOk ? 'fail' : P.safeModeH < 5 ? 'warn' : 'pass',
-    value: `${(P.batteryWh / 1000).toFixed(0)} kWh  (${P.safeModeH.toFixed(1)} h safe mode)`,
-    detail: !eclipseOk ? `Each lunar-orbit eclipse needs ${(P.eclipseWh / 1000).toFixed(1)} kWh, more than 80% of the battery.` : P.genKind === 'solar' ? `Eclipse draw ${(P.eclipseWh / 1000).toFixed(1)} kWh per orbit.` : 'Fuel cells run through eclipses; battery covers faults.',
+    value: `${Math.round(P.batteryWh).toLocaleString('en-US')} Wh  (${P.safeModeH.toFixed(1)} h safe mode)`,
+    detail: !eclipseOk ? `Each lunar-orbit eclipse needs ${Math.round(P.eclipseWh).toLocaleString('en-US')} Wh, more than 80% of the battery.` : P.genKind === 'solar' ? `Eclipse draw ${Math.round(P.eclipseWh).toLocaleString('en-US')} Wh per orbit.` : 'Fuel cells run through eclipses; battery covers faults.',
     fix: !eclipseOk ? 'Install a larger battery.' : P.safeModeH < 5 ? 'Under 5 h of safe-mode power if generation fails; a larger battery buys time.' : undefined,
     culprits: !eclipseOk || P.safeModeH < 5 ? [slotId('battery')] : [],
   });
@@ -152,7 +152,7 @@ export function reviewDesign(d: Design): ReviewResult {
   checks.push({
     id: 'comms', title: 'Communications & data', icon: 'comms',
     status: dataShort ? 'warn' : 'pass',
-    value: `${C.mbps} Mbps, ${(C.storageMB / 1000).toFixed(0)} GB`,
+    value: `${Math.round(C.mbps * 1000).toLocaleString('en-US')} kbps, ${(C.storageMB / 1000).toFixed(0)} GB`,
     detail: dataShort ? `Mapping makes ~${(C.estOrbitDataMB / 1000).toFixed(0)} GB but storage + downlink handle ~${((C.storageMB + C.estOrbitDownlinkMB) / 1000).toFixed(0)} GB: some data will be lost.` : site.surfaceCommAvailability < 1 ? `At ${site.short} Earth is low on the horizon: surface link only ~${Math.round(site.surfaceCommAvailability * 100)}% of the time.` : 'Link and storage can handle planned data.',
     fix: dataShort ? 'Add a faster antenna (HGA or laser) or a bigger recorder, or accept partial mapping.' : undefined,
     culprits: dataShort ? [slotId('comms'), slotId('storage')] : [],

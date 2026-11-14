@@ -7,8 +7,9 @@ import { COMPONENT_BY_ID, Component, componentsInSlot, SLOTS, SlotId } from '../
 import { cloneDesign, Design, LAUNCH_VEHICLES, REFERENCE_DESIGN, SITES, TEMPOS, LV_BY_ID, SITE_BY_ID } from '../../data/mission';
 import { reviewDesign, ReviewResult } from '../../simulation/review';
 import { analyzeDesign, DesignStats } from '../../simulation/spacecraft';
-import { BUDGET_M, SPEC_MODEL } from '../../simulation/constants';
+import { BUDGET_M, G0, SPEC_MODEL } from '../../simulation/constants';
 import { CAPSULE_OWNED_SLOTS, missionDv } from '../../simulation/specModel';
+import { fmt, fmtUsdM, kgToLb } from '../../simulation/units';
 
 type Cat = SlotId | 'plan';
 const FLOOR_Y = 209;
@@ -158,10 +159,11 @@ export class HangarScene extends Phaser.Scene {
     this.review = reviewDesign(this.design);
     const s = this.review.stats;
     const lv = LV_BY_ID[this.design.plan.lv];
-    const massF = s.mass.tliKg / lv.tliCapacityKg;
-    this.meters.mass.set(Math.min(1, massF / 1.15), `${(s.mass.tliKg / 1000).toFixed(1)}/${(lv.tliCapacityKg / 1000).toFixed(0)} t`, massF > 1 ? C.red : massF > 0.97 ? C.orange : C.green, 1 / 1.15);
+    const capKg = SPEC_MODEL ? s.lv.capacityKg : lv.tliCapacityKg; // spec: what this rocket can push to 12,600 m/s
+    const massF = s.mass.tliKg / Math.max(1, capKg);
+    this.meters.mass.set(Math.min(1, massF / 1.15), `${fmt(kgToLb(s.mass.tliKg))} lb`, massF > 1 ? C.red : massF > 0.97 ? C.orange : C.green, 1 / 1.15);
     const budF = s.costM / BUDGET_M;
-    this.meters.budget.set(Math.min(1, budF / 1.15), `$${(s.costM / 1000).toFixed(2)}B`, budF > 1 ? C.red : budF > 0.97 ? C.orange : C.green, 1 / 1.15);
+    this.meters.budget.set(Math.min(1, budF / 1.15), `$${fmt(s.costM)}M`, budF > 1 ? C.red : budF > 0.97 ? C.orange : C.green, 1 / 1.15);
     const pm = s.propulsion;
     const pf = pm.requiredKg / Math.max(1, pm.capacityKg);
     this.meters.dv.set(Math.min(1, pf / 1.15), pm.marginKg >= 0 ? `+${(pm.marginPct * 100).toFixed(0)}% spare` : `${(-pm.marginKg / 1000).toFixed(1)}t SHORT`, pm.marginKg < 0 ? C.red : pm.marginPct < 0.06 ? C.orange : C.green, 1 / 1.15);
@@ -245,15 +247,16 @@ export class HangarScene extends Phaser.Scene {
   }
 
   metricLine(c: Component): string {
-    const parts: string[] = [`${c.massKg ? kg(c.massKg) : c.slot === 'lander' ? kg(c.descentDryKg! + c.descentPropKg! + c.ascentDryKg! + c.ascentPropKg!) : '0 kg'}`];
+    const parts: string[] = [`${c.massKg ? kg(c.massKg) : c.slot === 'lander' ? kg(c.descentDryKg! + c.descentPropKg! + c.ascentDryKg! + c.ascentPropKg!) : '0 lb'}`];
     if (c.ispS && c.slot === 'propulsion') parts.push(`Isp ${c.ispS}s`);
     if (c.propCapacityKg) parts.push(`${(c.propCapacityKg / 1000).toFixed(1)} t prop`);
-    if (c.genW) parts.push(`${(c.genW / 1000).toFixed(1)} kW`);
-    if (c.storageWh) parts.push(`${c.storageWh / 1000} kWh`);
-    if (c.downlinkMbps) parts.push(`${c.downlinkMbps} Mbps`);
+    if (c.genW) parts.push(`${fmt(c.genW)} W`);
+    if (c.storageWh) parts.push(`${fmt(c.storageWh)} Wh`);
+    if (c.downlinkMbps) parts.push(`${fmt(c.downlinkMbps * 1000)} kbps`);
     if (c.storageMB) parts.push(`${c.storageMB >= 1e6 ? '1 TB' : c.storageMB / 1000 + ' GB'}`);
-    if (c.heatRejectW) parts.push(`${c.heatRejectW / 1000} kW`);
-    if (c.crewCapacity) parts.push(`${c.crewCapacity} crew`);
+    if (c.heatRejectW) parts.push(`${fmt(c.heatRejectW)} W`);
+    if (c.crewCapacity && c.slot !== 'lander') parts.push(`${c.crewCapacity} crew`); // landers show crew in their name
+    if (c.thrustN && c.slot === 'lander') parts.push(`${fmt(c.thrustN)} N`);
     if (c.powerW && !c.genW) parts.push(`${c.powerW} W`);
     return parts.slice(0, 3).join('  ');
   }
@@ -296,17 +299,24 @@ export class HangarScene extends Phaser.Scene {
       const sign = slot.multi && isCurrent ? 'REMOVE: ' : slot.multi ? 'ADD: ' : 'SWAP: ';
       const dm = b.mass.tliKg - a.mass.tliKg, dc = b.costM - a.costM, dp = b.propulsion.marginKg - a.propulsion.marginKg, dw = (b.power.orbitAvgGenW - b.power.peakLoadW) - (a.power.orbitAvgGenW - a.power.peakLoadW);
       const f = (v: number, unit: string, goodIfUp: boolean) => (Math.abs(v) < 0.5 ? '' : `${v > 0 ? '↑' : '↓'}${Math.abs(Math.round(v)).toLocaleString('en-US')}${unit}${(v > 0) === goodIfUp ? '' : '!'}`);
-      const parts = [f(dm, 'kg', false), f(dc, '$M', false), f(dp, 'kg prop', true), f(dw, 'W', true)].filter(Boolean);
+      const parts = [f(kgToLb(dm), ' lb', false), f(dc * 1e6, ' USD', false), f(kgToLb(dp), ' lb fuel', true), f(dw, ' W', true)].filter(Boolean);
       lines.push(sign + (parts.join(' ') || 'no change'));
     }
-    const body = txt(this, 328, y0 + 10, comp.desc, { maxWidth: 144, color: C.text });
+    // thrust in N and exhaust speed in m/s (Isp stays in the glossary)
+    const engine = comp.thrustN && comp.ispS ? `
+Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentThrustN)} N up` : ''}, exhaust ${fmt(comp.ispS * G0)} m/s.` : '';
+    // Never clip: the swap line and engine numbers come first; the description is trimmed (at full
+    // font size) to the room left, and the WHY tooltip carries the full text.
+    const swap = lines.length ? txt(this, 328, y0 + 10, lines.join('\n'), { maxWidth: 144, color: C.orange }) : null;
+    if (swap) D.add(swap);
+    const top = y0 + 10 + (swap ? swap.height + 1 : 0);
+    const body = txt(this, 328, top, `${engine.trim() ? engine.trim() + '\n' : ''}${comp.desc}`, { maxWidth: 144, color: C.text });
     D.add(body);
-    let y = y0 + 10 + body.height + 2;
-    if (lines.length) { const t = txt(this, 328, y, lines.join('\n'), { maxWidth: 144, color: C.orange }); D.add(t); y += t.height + 2; }
-    // educational note (hover for full)
-    const learnBtn = txt(this, 328, Math.min(y, 202), '▶ WHY IT MATTERS', { color: C.teal });
+    while (top + body.height > 212 && body.text.length > 12) body.setText(body.text.replace(/\s*\S+…?$/, '…'));
+    // educational note (hover for full), on the title line
+    const learnBtn = txt(this, 472, y0, '▶ WHY', { color: C.teal, align: 'right' });
     learnBtn.setInteractive({ useHandCursor: true });
-    learnBtn.on('pointerover', () => Tooltip.show(this, comp.learn, { x: 300, y: 120 }));
+    learnBtn.on('pointerover', () => Tooltip.show(this, `${comp.desc}${engine}\n\n${comp.learn}`, { x: 300, y: 120 }));
     learnBtn.on('pointerout', () => Tooltip.hide());
     D.add(learnBtn);
   }
@@ -326,7 +336,7 @@ export class HangarScene extends Phaser.Scene {
         R.add(b);
       });
     };
-    row(19, 'LAUNCH VEHICLE', LAUNCH_VEHICLES.map((v) => ({ id: v.id, label: v.short.split(' ')[0].toUpperCase().slice(0, 7), tip: `${v.name}: ${(v.tliCapacityKg / 1000).toFixed(1)} t to TLI, $${v.costM}M, ${(v.reliability * 100).toFixed(1)}% reliable.\n${v.desc}\n${v.learn}` })), p.lv, (v) => { this.design.plan.lv = v as Design['plan']['lv']; });
+    row(19, 'LAUNCH VEHICLE', LAUNCH_VEHICLES.map((v) => ({ id: v.id, label: v.short.split(' ')[0].toUpperCase().slice(0, 7), tip: SPEC_MODEL ? `${v.name}: ${fmt(kgToLb(v.tliCapacityKg))} lb to the Moon (12,600 m/s), rocket ${fmtUsdM(v.costM)}.\n${v.desc}\n${v.learn}` : `${v.name}: ${(v.tliCapacityKg / 1000).toFixed(1)} t to TLI, $${v.costM}M, ${(v.reliability * 100).toFixed(1)}% reliable.\n${v.desc}\n${v.learn}` })), p.lv, (v) => { this.design.plan.lv = v as Design['plan']['lv']; });
     row(46, 'LANDING SITE', SITES.map((s) => ({ id: s.id, label: s.short.split(' ')[0].toUpperCase().slice(0, 7), tip: `${s.name}: ${SPEC_MODEL ? `LOI ${missionDv(this.design).loi} m/s, TEI ${missionDv(this.design).tei} m/s, descent ${missionDv(this.design).descent} m/s (set by the lunar orbit)` : `LOI ${s.dvLoi} m/s, TEI ${s.dvTei} m/s, descent ${s.dvDescent} m/s`}. Science x${s.scienceMult}.\n${s.desc}\n${s.learn}` })), p.site, (v) => { this.design.plan.site = v as Design['plan']['site']; });
     row(73, 'CREW SIZE', [{ id: 3, label: '3 CREW', tip: '3 crew: 2 land, 1 stays in orbit (Apollo style). Fewer consumables.' }, { id: 4, label: '4 CREW', tip: '4 crew: up to 3 land with the Pathfinder lander. More EVA hours, more consumables and mass.' }], p.crew, (v) => { this.design.plan.crew = v as 3 | 4; });
     row(100, 'SURFACE STAY', [1, 2, 3].map((d) => ({ id: d, label: `${d} DAY${d > 1 ? 'S' : ''}`, tip: `${d} day(s) on the surface. Longer stays allow more EVAs but need lander battery & consumables (and crew food/water in orbit).` })), p.stayDays, (v) => { this.design.plan.stayDays = v as 1 | 2 | 3; });

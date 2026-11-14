@@ -8,6 +8,7 @@ import { securedMB } from './mission';
 import { budgetForM } from './specModel';
 import { SCIENCE_TARGET_POINTS, SHIELD_ROUGH_RIDE_SAFETY } from '../data/specParts';
 import { scienceMult } from '../data/roles';
+import { fmtLb } from './units';
 import type { MissionState } from './types';
 
 export const WEIGHTS = { science: 0.3, crew: 0.3, engineering: 0.2, resources: 0.1, budget: 0.1 };
@@ -57,10 +58,10 @@ export function scienceBreakdown(s: MissionState): ScienceLine[] {
     const labels: Record<string, string> = { plaque: 'Oakland plaque placed', broadcast: 'Live broadcast to Oakland', seismo: 'Seismic station deployed', samples: 'Geology samples', pancam: 'Panoramic survey', retro: 'Laser retroreflector', drill: 'Deep core drilled', gpr: 'Radar map of the subsurface', rover: 'Rover traverse', regolith: 'Regolith core', skylight: 'Lava-tube skylight survey', ice: 'Polar ice sample' };
     if (id === 'samples' && s.samplesAboardKg < s.surface.samplesKg) {
       const kept = s.samplesAboardKg / Math.max(1, s.surface.samplesKg);
-      lines.push({ id, label: labels[id], points: pts * kept, detail: `${Math.round(s.samplesAboardKg)} kg returned (${Math.round(s.surface.samplesKg - s.samplesAboardKg)} kg left behind)` });
+      lines.push({ id, label: labels[id], points: pts * kept, detail: `${fmtLb(s.samplesAboardKg)} returned (${fmtLb(s.surface.samplesKg - s.samplesAboardKg)} left behind)` });
       continue;
     }
-    lines.push({ id, label: labels[id] ?? id, points: s.crewLost && id === 'samples' ? 0 : pts, detail: id === 'samples' ? `${Math.round(s.samplesAboardKg)} kg returned` : '' });
+    lines.push({ id, label: labels[id] ?? id, points: s.crewLost && id === 'samples' ? 0 : pts, detail: id === 'samples' ? `${fmtLb(s.samplesAboardKg)} returned` : '' });
   }
   return lines;
 }
@@ -104,7 +105,7 @@ export function evaluate(s: MissionState): MissionReport {
   const parts = [
     { key: 'science' as const, label: 'Scientific objectives', score: scienceScore, weight: WEIGHTS.science, note: `${sciencePoints.toFixed(0)} / ${SCIENCE_FULL_POINTS} science points` },
     { key: 'crew' as const, label: 'Crew safety & return', score: crewScore, weight: WEIGHTS.crew, note: returned ? `Crew home, condition ${Math.round(s.condition)}%` : s.lossCause ?? 'Crew not returned' },
-    { key: 'engineering' as const, label: 'Engineering performance', score: engineering, weight: WEIGHTS.engineering, note: `Prop ${Math.round(s.propKg)} kg left, ${s.flags.brownoutH.toFixed(1)} h brownout, ${(s.lostMB / 1000).toFixed(0)} GB lost` },
+    { key: 'engineering' as const, label: 'Engineering performance', score: engineering, weight: WEIGHTS.engineering, note: `Prop ${fmtLb(s.propKg)} left, ${s.flags.brownoutH.toFixed(1)} h brownout, ${(s.lostMB / 1000).toFixed(0)} GB lost` },
     { key: 'resources' as const, label: 'Resource efficiency', score: resources, weight: WEIGHTS.resources, note: `${Math.round(leftover * 100)}% of consumables left (ideal 5-40%)` },
     { key: 'budget' as const, label: 'Budget efficiency', score: budget, weight: WEIGHTS.budget, note: `$${reserve.toLocaleString('en-US')}M of $${budgetM.toLocaleString('en-US')}M unspent` },
   ];
@@ -150,12 +151,13 @@ export function evaluate(s: MissionState): MissionReport {
     outcome, outcomeLabel, overall: Math.round(overall), grade: letter(overall), engineeringGrade, parts,
     science: sci, sciencePoints,
     resources: [
-      { label: 'Propellant', value: `${Math.round(s.propKg)} kg` },
+      { label: 'Propellant', value: fmtLb(s.propKg) },
       { label: 'Battery', value: `${Math.round((s.batteryWh / Math.max(1, s.batteryCapWh)) * 100)}%` },
-      { label: 'Oxygen', value: `${s.o2Kg.toFixed(1)} kg` },
-      { label: 'Water', value: `${s.waterKg.toFixed(1)} kg` },
+      { label: 'Oxygen', value: fmtLb(s.o2Kg) },
+      { label: 'Water', value: fmtLb(s.waterKg) },
       { label: 'Data secured', value: `${((securedMB(s, 'map') + securedMB(s, 'neutron') + securedMB(s, 'pancam') + securedMB(s, 'seismo')) / 1000).toFixed(0)} GB` },
-      { label: 'Samples', value: `${Math.round(s.samplesAboardKg)} kg` },
+      { label: 'Samples', value: fmtLb(s.samplesAboardKg) },
+      { label: 'Thruster fuel', value: fmtLb(s.rcsFuelKg ?? 0) },
     ],
     decisions: s.decisions.map((d) => ({ event: d.event, choice: d.choice, fd: !!d.fd, good: d.good, bad: d.bad, result: d.result })),
     fdBonus: E?.fdBonus ?? 0,
