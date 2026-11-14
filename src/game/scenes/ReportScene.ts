@@ -104,6 +104,7 @@ export class ReportScene extends Phaser.Scene {
     } else if (i === 2) {
       line(`DECISION LOG  (seed ${r.seed})`, C.gold2);
       line(`* = Flight Director pick.  Bonus +${r.fdBonus}.  Mission points ${r.missionPoints.toLocaleString('en-US')}.`, C.teal);
+      if (r.retries) line(`Landing retries: ${r.retries}${store.mission?.design.spec?.difficulty === 'hard' ? ` (-100 points each)` : ' (free on Easy)'}`, C.orange);
       if (!r.decisions.length) line('No emergencies required a decision.', C.dim);
       for (const d of r.decisions) {
         line(`${d.fd ? '*' : '•'} ${d.event}`, C.orange);

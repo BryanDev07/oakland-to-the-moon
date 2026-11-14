@@ -8,6 +8,7 @@ import { securedMB } from './mission';
 import { budgetForM } from './specModel';
 import { SCIENCE_TARGET_POINTS, SHIELD_ROUGH_RIDE_SAFETY } from '../data/specParts';
 import { scienceMult } from '../data/roles';
+import { RETRY_PENALTY } from './deck';
 import { fmtLb } from './units';
 import type { MissionState } from './types';
 
@@ -30,6 +31,7 @@ export interface MissionReport {
   resources: { label: string; value: string }[];
   decisions: { event: string; choice: string; fd: boolean; good?: string; bad?: string; result?: string }[];
   fdBonus: number; // Flight Director bonus (+50 per matching pick on Hard, G)
+  retries: number; // landing retries after a crash (-100 points each on Hard, G)
   missionPoints: number; // overall x 10 + Flight Director bonus (G)
   failures: string[];
   recommendations: string[];
@@ -64,6 +66,11 @@ export function scienceBreakdown(s: MissionState): ScienceLine[] {
     lines.push({ id, label: labels[id] ?? id, points: s.crewLost && id === 'samples' ? 0 : pts, detail: id === 'samples' ? `${fmtLb(s.samplesAboardKg)} returned` : '' });
   }
   return lines;
+}
+
+/** Hard: -100 mission points per landing retry; Easy retries are free. */
+export function retryPenalty(s: MissionState): number {
+  return s.design.spec?.difficulty === 'hard' ? (s.em?.retries ?? 0) * RETRY_PENALTY : 0;
 }
 
 export function evaluate(s: MissionState): MissionReport {
@@ -161,7 +168,8 @@ export function evaluate(s: MissionState): MissionReport {
     ],
     decisions: s.decisions.map((d) => ({ event: d.event, choice: d.choice, fd: !!d.fd, good: d.good, bad: d.bad, result: d.result })),
     fdBonus: E?.fdBonus ?? 0,
-    missionPoints: Math.round(overall) * 10 + (E?.fdBonus ?? 0) - (E?.deskPenalty ?? 0),
+    missionPoints: Math.round(overall) * 10 + (E?.fdBonus ?? 0) - (E?.deskPenalty ?? 0) - retryPenalty(s),
+    retries: E?.retries ?? 0,
     failures, recommendations: recs, lessons,
     date: new Date().toISOString(),
     seed: s.seed,

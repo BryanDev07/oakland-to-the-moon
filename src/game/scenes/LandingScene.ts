@@ -34,6 +34,7 @@ export class LandingScene extends Phaser.Scene {
   cmd = { throttle: 0.4, tilt: 0 };
   hold = { up: false, left: false, right: false };
   autoBtn!: Button;
+  snapshot = ''; // mission state at the start of the approach (for a retry after a crash)
   constructor() { super('Landing'); }
 
   create() {
@@ -47,6 +48,7 @@ export class LandingScene extends Phaser.Scene {
       return;
     }
     audio.music('tension');
+    this.snapshot = JSON.stringify(s);
     const ap = Sim.approachState(s);
     this.terrain = makeTerrain(s.seed, ap.hazard);
     this.L = createLanding(this.terrain, ap);
@@ -242,7 +244,7 @@ export class LandingScene extends Phaser.Scene {
     const s = store.mission!;
     const outcome = L.outcome as 'soft' | 'hard' | 'abort' | 'crash';
     if (outcome === 'soft' || outcome === 'hard') { audio.sfx('land'); this.flame.setVisible(false); this.dust.setVisible(false); if (store.settings.screenShake) this.cameras.main.shake(300, outcome === 'hard' ? 0.012 : 0.004); }
-    if (outcome === 'crash') { audio.sfx('fail'); if (store.settings.screenShake) this.cameras.main.shake(600, 0.02); this.lander.setAngle(35); }
+    if (outcome === 'crash') { this.crash(); return; } // debris, then retry or accept
     if (outcome === 'abort') { audio.sfx('stage'); this.flyAscent(); }
     if (outcome === 'soft') audio.sfx('success');
     Sim.applyLanding(s, outcome, L.vImpact, L.propKg);
@@ -261,6 +263,53 @@ export class LandingScene extends Phaser.Scene {
         onChoose: () => fadeTo(this, outcome === 'soft' || outcome === 'hard' ? 'Surface' : outcome === 'abort' ? 'Ops' : 'Report'),
       });
     });
+  }
+
+  /** Crash: the lander breaks apart, then the player may retry the landing (Easy free, Hard -100 points). */
+  crash() {
+    const L = this.L;
+    const s = store.mission!;
+    audio.sfx('fail');
+    if (store.settings.screenShake) this.cameras.main.shake(700, 0.025);
+    this.cameras.main.flash(250, 255, 200, 140);
+    const x = this.lander.x, gy = this.lander.y;
+    this.lander.setVisible(false); this.flame.setVisible(false);
+    this.msg.setText(''); // no flight warnings over the wreck
+    this.add.ellipse(x, gy + 1, 30, 5, 0x1a1a22, 0.8); // scorch mark
+    for (let i = 0; i < 3; i++) this.add.sprite(x + Phaser.Math.Between(-8, 8), gy, 'smoke').setOrigin(0.5, 1).setScale(1.5 + i * 0.5).play('smoke');
+    this.add.sprite(x, gy + 2, 'dust').setOrigin(0.5, 1).setScale(3, 2).play('dust');
+    const colors = [0xc8c8d0, 0xf4c63c, 0x8a8aa0, 0x3a3a48, 0xe8b030];
+    for (let i = 0; i < 16; i++) {
+      const piece = this.add.rectangle(x, gy - 4, Phaser.Math.Between(2, 4), Phaser.Math.Between(1, 3), colors[i % colors.length]).setDepth(20);
+      const dx = Phaser.Math.Between(-60, 60), up = Phaser.Math.Between(12, 40), t = Phaser.Math.Between(350, 550);
+      this.tweens.add({ targets: piece, x: x + dx * 0.5, y: gy - up, angle: Phaser.Math.Between(-360, 360), duration: t, ease: 'Quad.Out',
+        onComplete: () => this.tweens.add({ targets: piece, x: x + dx, y: gy + Phaser.Math.Between(-1, 2), angle: Phaser.Math.Between(-720, 720), duration: t + 150, ease: 'Bounce.Out' }) });
+    }
+    const hard = s.design.spec?.difficulty === 'hard';
+    const tries = s.em?.retries ?? 0;
+    this.time.delayedCall(1700, () => modal(this, {
+      title: 'LANDER LOST', alert: true,
+      text: `Impact at ${L.vImpact.toFixed(1)} m/s. Lesson: keep vertical speed under 3 m/s near the ground, and trust the autopilot or abort when fuel runs low.\n${hard ? `Hard: each retry costs 100 mission points (retries so far: ${tries}).` : 'Easy: retries are free.'}`,
+      options: [
+        { label: 'Retry the landing', detail: hard ? `-100 mission points (retry #${tries + 1})` : 'Free on Easy' },
+        { label: 'Accept the outcome: mission report', detail: 'The crew is lost; see what went wrong.' },
+      ],
+      onChoose: (i) => {
+        if (i === 0) {
+          // restore the mission as it was at the start of the approach, keeping the retry count
+          const restored = JSON.parse(this.snapshot) as typeof s;
+          restored.em = { ...(restored.em ?? s.em!), retries: tries + 1 };
+          Sim.log(restored, `Landing retry #${tries + 1}${hard ? ' (-100 mission points)' : ''}.`, 'warn');
+          store.mission = restored;
+          store.saveMission();
+          this.scene.restart();
+          return;
+        }
+        Sim.applyLanding(s, 'crash', L.vImpact, L.propKg);
+        store.saveMission();
+        fadeTo(this, 'Report');
+      },
+    }));
   }
 
   flyAscent() {

@@ -29,6 +29,7 @@ export const STAGE_LABEL: Record<Stage, string> = {
 /** Stages handled by a scene hook (launch, landing, surface) rather than the coast timeline. */
 export const SCENE_STAGES: Stage[] = ['pad', 'launch', 'earthOrbit', 'landing', 'surface'];
 export const FD_BONUS = 50; // G
+export const RETRY_PENALTY = 100; // G: mission points per landing retry on Hard (Easy retries are free)
 export const EASY_CARDS = 3, HARD_CARDS = 5;
 
 /** Emergency bookkeeping carried in MissionState.em. */
@@ -38,6 +39,7 @@ export interface EmergencyState {
   burnRisk: number; shieldDamage: number; scoreCap: number; landerLostH: number;
   freeFixUsed: boolean; abortReason: string | null;
   deskPenalty?: number; // Calculation Desk reveals (Hard, G: 10 points each)
+  retries?: number; // landing retries after a crash
 }
 export function newEmergencyState(rocketSpare: number): EmergencyState {
   return { rocketSpare, fdBonus: 0, scienceAdj: 0, scienceMult: 1, safetyAdj: 0, extraCostM: 0, burnRisk: 0, shieldDamage: 0, scoreCap: 100, landerLostH: 0, freeFixUsed: false, abortReason: null };

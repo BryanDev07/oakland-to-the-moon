@@ -4,7 +4,7 @@ import { cloneDesign, Design, REFERENCE_DESIGN } from '../../src/data/mission';
 import { ROCKET_PRESETS } from '../../src/data/specParts';
 import { buildCard, DECK, DECK_BY_ID, em, Stage, STAGE_ORDER } from '../../src/simulation/deck';
 import { createMission, resolveEvent, triggerStage } from '../../src/simulation/mission';
-import { evaluate } from '../../src/simulation/scoring';
+import { evaluate, retryPenalty } from '../../src/simulation/scoring';
 import type { MissionState } from '../../src/simulation/types';
 import { fmt } from '../../src/simulation/units';
 
@@ -130,5 +130,17 @@ describe('resolving', () => {
     expect(d.choice).toMatch(/^A\./);
     expect(d.bad).toMatch(/lb of oxygen/);
     expect(evaluate(s).seed).toBe(s.seed);
+  });
+});
+
+describe('landing retries after a crash', () => {
+  it('Hard: each retry costs 100 mission points; Easy retries are free', () => {
+    const h = createMission(mode('hard'), 14), e = createMission(mode('easy'), 14);
+    em(h).retries = 2; em(e).retries = 2;
+    expect(retryPenalty(h)).toBe(200);
+    expect(retryPenalty(e)).toBe(0);
+    const before = evaluate(createMission(mode('hard'), 14)).missionPoints;
+    expect(evaluate(h).missionPoints).toBe(before - 200);
+    expect(evaluate(h).retries).toBe(2);
   });
 });
