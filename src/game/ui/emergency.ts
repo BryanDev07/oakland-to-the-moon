@@ -28,7 +28,7 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
   const tag = ev.stage ? `${ev.stage}  ·  ${ev.real ? `This really happened: ${ev.real}` : ev.scenario ? 'Scenario (made up, but realistic)' : ''}\n` : '';
   const hint = ev.hint ? `\nMISSION CONTROL HINT: ${ev.hint}` : '';
   const options = ev.options.map((o) => ({ label: armed ? `${o.label} (FREE FIX)` : o.label, detail: o.detail || undefined, good: o.good, bad: armed ? 'Cancelled by your free fix.' : o.bad }));
-  if (canFix && !armed) options.push({ label: '★ Use your one free fix (Spacecraft Engineer)', detail: 'Then pick A, B or C: its Bad effect will not happen.', good: undefined, bad: undefined });
+  if (canFix && !armed) options.push({ label: '* Use your one free fix (Spacecraft Engineer)', detail: 'Then pick A, B or C: its Bad effect will not happen.', good: undefined, bad: undefined });
   modal(scene, {
     title: ev.title, text: `${tag}${ev.text}${hint}`, learn: ev.learn || undefined, alert: true, width: 440,
     options,

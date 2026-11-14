@@ -56,7 +56,7 @@ export class ReportScene extends Phaser.Scene {
     // right: tabbed details
     panel(this, 180, 4, 296, 236, 'panel');
     const tabNames = ['SCIENCE', 'RESOURCES', 'DECISIONS', 'LESSONS', 'HISTORY'];
-    tabNames.forEach((n, i) => { const b = new Button(this, 186 + i * 57, 9, n, () => this.show(i), { w: 55, h: 15 }); this.tabs.push(b); });
+    tabNames.forEach((n, i) => { const b = new Button(this, 186 + i * 51, 9, n, () => this.show(i), { w: 49, h: 15 }); this.tabs.push(b); }); // leaves room for the fullscreen + gear buttons
     this.page = this.add.container(0, 0);
     new Button(this, 180, 244, 'FLY AGAIN', () => this.flyAgain(), { w: 72, h: 22, style: 'go', tooltip: 'Same spacecraft, new launch day (different events).' });
     new Button(this, 256, 244, 'MODIFY DESIGN', () => { store.clearMission(); fadeTo(this, 'Hangar'); }, { w: 104, h: 22, tooltip: 'Back to the hangar with your design preserved.' });
@@ -73,14 +73,20 @@ export class ReportScene extends Phaser.Scene {
     store.saveMission();
     fadeTo(this, 'Launch');
   }
-  show(i: number) {
+  show(i: number, size = 10) {
     this.tabs.forEach((b, k) => b.setSelected(k === i));
     const P = this.page;
     P.removeAll(true);
     const r = this.rep;
     const x = 188;
     let y = 30;
-    const line = (text: string, color: number = C.text, indent = 0) => { const t = txt(this, x + indent, y, text, { color, maxWidth: 280 - indent }); P.add(t); y += t.height + 3; return t; };
+    const BOTTOM = 238; // keep the page inside its panel
+    let hidden = 0;
+    const line = (text: string, color: number = C.text, indent = 0) => {
+      const t = txt(this, x + indent, y, text, { color, maxWidth: 280 - indent, size });
+      if (y + t.height > BOTTOM - (size === 8 ? 10 : 0)) { hidden++; t.destroy(); return t; }
+      P.add(t); y += t.height + (size === 8 ? 2 : 3); return t;
+    };
     if (i === 0) {
       line('SCIENTIFIC ACHIEVEMENTS', C.gold2);
       if (!r.science.length) line('No science returned.', C.dim);
@@ -93,10 +99,10 @@ export class ReportScene extends Phaser.Scene {
       for (const p of r.parts) line(`${p.label}: ${p.note}`, C.text);
     } else if (i === 2) {
       line(`DECISION LOG  (seed ${r.seed})`, C.gold2);
-      line(`★ = Flight Director pick.  Bonus +${r.fdBonus}.  Mission points ${r.missionPoints.toLocaleString('en-US')}.`, C.teal);
+      line(`* = Flight Director pick.  Bonus +${r.fdBonus}.  Mission points ${r.missionPoints.toLocaleString('en-US')}.`, C.teal);
       if (!r.decisions.length) line('No emergencies required a decision.', C.dim);
       for (const d of r.decisions) {
-        line(`${d.fd ? '★' : '•'} ${d.event}`, C.orange);
+        line(`${d.fd ? '*' : '•'} ${d.event}`, C.orange);
         line(`→ ${d.choice}`, C.white, 8);
         if (d.bad) line(`Cost: ${d.bad}`, C.red, 8);
       }
@@ -117,6 +123,8 @@ export class ReportScene extends Phaser.Scene {
       line('Engineering references: NASA mission design resources (see SOURCES.md).', C.white);
       line('From the Town to the Stars.', C.gold);
     }
+    if (hidden && size === 10) { this.show(i, 8); return; } // too long: try the small font
+    if (hidden) P.add(txt(this, x, BOTTOM - 9, `… and ${hidden} more line${hidden === 1 ? '' : 's'}`, { color: C.dim, size: 8 }));
     void W;
   }
 }

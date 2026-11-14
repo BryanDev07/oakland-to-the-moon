@@ -35,8 +35,12 @@ export class ReviewScene extends Phaser.Scene {
       const bg = this.add.rectangle(8, y, 292, pitch - 1, c.status === 'fail' ? 0x7a1626 : c.status === 'warn' ? 0x6a2808 : 0x16545c, 0.45).setOrigin(0, 0).setInteractive({ useHandCursor: true });
       this.rows.push(bg);
       this.add.image(11, y + pad, 'icons', iconFrame(c.icon)).setOrigin(0, 0);
-      txt(this, 26, y + pad + 2, c.title, { color: C.white });
-      txt(this, 270, y + pad + 2, c.value, { align: 'right', color: C.dim });
+      const title = txt(this, 26, y + pad + 2, c.title, { color: C.white });
+      const value = txt(this, 270, y + pad + 2, c.value, { align: 'right', color: C.dim });
+      // never overlap: small font first, then trim (full text is in the detail panel)
+      const room = 270 - (26 + title.width + 6);
+      if (value.width > room) value.setFontSize(8).setY(y + pad + 3);
+      while (value.width > room && value.text.length > 4) value.setText(value.text.slice(0, -2) + '…');
       this.add.image(284, y + pad, 'icons', iconFrame(c.status === 'pass' ? 'ok' : c.status === 'warn' ? 'warn' : 'fail')).setOrigin(0, 0);
       // status as words too (not colour alone)
       bg.on('pointerover', () => { audio.sfx('move'); this.showDetail(c, i); });

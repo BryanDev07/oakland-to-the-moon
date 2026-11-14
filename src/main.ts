@@ -28,10 +28,15 @@ const game = new Phaser.Game({
   pixelArt: true,
   roundPixels: true,
   backgroundColor: '#0b0820',
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, fullscreenTarget: 'game' },
   scene: scenes,
   fps: { target: 60 },
   input: { activePointers: 1 },
+});
+
+// F toggles fullscreen anywhere (the gear's neighbour button does the same).
+window.addEventListener('keydown', (e) => {
+  if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) game.scale.toggleFullscreen();
 });
 
 // Test / debugging hooks (used by Playwright).

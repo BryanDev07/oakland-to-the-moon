@@ -334,7 +334,7 @@ export function resolveEvent(s: MissionState, option: number, freeFix = false): 
   const fd = card ? ev.fdPick === option : false;
   let msg = card ? resolveCard(card, s, option, rng, freeFix) : EVENT_BY_ID[ev.id].resolve(s, option, rng);
   // Flight Director bonus (Hard only): the pick matched the safest sound call for the player's numbers
-  if (fd && specOf(s.design).difficulty === 'hard') { em(s).fdBonus += FD_BONUS; msg += ` ★ Flight Director bonus +${FD_BONUS}.`; }
+  if (fd && specOf(s.design).difficulty === 'hard') { em(s).fdBonus += FD_BONUS; msg += ` * Flight Director bonus +${FD_BONUS}.`; }
   s.rngState = rng.state;
   s.decisions.push({ event: ev.title, choice: label, t: s.t, fd, good: ev.options[option]?.good, bad: ev.options[option]?.bad, result: msg });
   log(s, `${ev.title}: ${label}. ${msg}`, 'decision');

@@ -67,7 +67,7 @@ export class LaunchScene extends Phaser.Scene {
     this.hud = txt(this, 10, 9, '', { color: C.green }).setScrollFactor(0);
     this.count = txt(this, W / 2, 70, '', { align: 'center', color: C.gold2, scale: 3 }).setScrollFactor(0).setDepth(100);
     txt(this, W - 6, H - 12, `${LV_BY_ID[this.lvId as 'estuary'].name} • ${m.design.plan.crew} crew aboard`, { align: 'right', color: C.dim }).setScrollFactor(0);
-    new Button(this, W - 74, 4, 'SKIP ▶▶', () => this.finish(), { w: 52, tooltip: 'Skip the launch cinematic' }).setScrollFactor(0).setDepth(1200);
+    new Button(this, W - 92, 4, 'SKIP ▶▶', () => this.finish(), { w: 52, tooltip: 'Skip the launch cinematic' }).setScrollFactor(0).setDepth(1200);
     gearButton(this);
     crt(this);
     const lines: [number, string, string][] = [
@@ -198,7 +198,7 @@ export class LaunchScene extends Phaser.Scene {
       : 'Upper stage burn complete. TOWN-1 is on a three-day coast to the Moon.', { align: 'center', maxWidth: 260, color: m.flags.tliTrimDv > 0 ? C.orange : C.white });
     if (m.flags.tliTrimDv > 0) audio.sfx('warn');
     this.time.delayedCall(4200, () => { audio.loop('rumble', 0); store.markSeen('launch'); fadeTo(this, 'Ops'); });
-    new Button(this, W - 74, 4, 'SKIP ▶▶', () => { audio.loop('rumble', 0); fadeTo(this, 'Ops'); }, { w: 52 }).setDepth(1200);
+    new Button(this, W - 92, 4, 'SKIP ▶▶', () => { audio.loop('rumble', 0); fadeTo(this, 'Ops'); }, { w: 52 }).setDepth(1200);
     crt(this);
   }
   finish() {
