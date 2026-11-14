@@ -57,7 +57,7 @@ export const NEUTRON_TARGET_H = 10;
 
 /** Feature flags (JOSEPH_SPEC rule A1.6: turn features off, don't delete them). */
 export const SPEC_MODEL = true; // capsule + staged-rocket model from JOSEPH_SPEC tab 3 / tab 6
-export const RELIABILITY_ROLLS = true; // chance-of-success rolls (launch-vehicle underperformance)
+export const RELIABILITY_ROLLS = false; // chance-of-success rolls removed: risk comes only from emergencies
 
 export const PROGRAM = 'Pacific Space Exploration Agency (fictional)';
 export const MISSION_NAME = 'TOWN-1';

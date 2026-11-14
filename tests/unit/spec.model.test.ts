@@ -1,6 +1,6 @@
 /**
  * JOSEPH_SPEC model, end to end through analyzeDesign() / reviewDesign() / the mission sim:
- * the physics lessons the spec says the game must enforce, plus PART C #26, #28 and #29.
+ * the physics lessons the spec says the game must enforce, plus PART C #26 and #28-#30.
  */
 import { describe, expect, it } from 'vitest';
 import { cloneDesign, Design, LAUNCH_VEHICLES, REFERENCE_DESIGN } from '../../src/data/mission';
@@ -13,6 +13,7 @@ import { scheduleEvents } from '../../src/simulation/events';
 import { Rng } from '../../src/simulation/rng';
 import * as K from '../../src/simulation/constants';
 import { kgToLb } from '../../src/simulation/units';
+import { flyMission } from './helpers';
 
 const status = (d: Design, id: string) => reviewDesign(d).checks.find((c) => c.id === id)?.status;
 const artemis = () => {
@@ -124,7 +125,7 @@ describe('spec model: material + fuel risks', () => {
   });
 });
 
-describe('PART C #26, #28-#29', () => {
+describe('PART C #26, #28-#30', () => {
   it('#26 at $0 or below the review locks launch', () => {
     const d = cloneDesign(artemis()); d.spec = { ...d.spec, difficulty: 'hard' };
     const r = reviewDesign(d);
@@ -137,5 +138,16 @@ describe('PART C #26, #28-#29', () => {
     const a = createMission(REFERENCE_DESIGN, 777), b = createMission(REFERENCE_DESIGN, 777);
     expect(a.schedule).toEqual(b.schedule);
     expect(scheduleEvents(a, new Rng(5))).toEqual(scheduleEvents(b, new Rng(5)));
+  });
+  it('#30 reliability rolls are disabled: no random failure without an emergency', () => {
+    expect(K.RELIABILITY_ROLLS).toBe(false);
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = createMission(REFERENCE_DESIGN, seed * 31);
+      expect(s.flags.tliTrimDv).toBe(0);
+      s.schedule = []; // no emergencies at all
+      const done = flyMission(s);
+      expect(done.crewLost).toBe(false);
+      expect(done.phase).toBe('COMPLETE');
+    }
   });
 });

@@ -15,7 +15,8 @@ mass kg, velocity m/s, time s, power W, energy Wh, data MB (megabytes), data rat
 > Apollo-class CSM / Budget) supplies the service-module engine, fuel, heat shield and solar;
 > lunar-orbit Δv comes from the orbit choice (LLO: 900 in / 900 home / 1,870 down / 1,870 up;
 > NRHO: 430 / 410 / 2,600 / 2,600 m/s); life support is 14.97 lb per astronaut per day and an
-> astronaut + suit is 400 lb; and heat-shield health = rating ÷ 24,400 mph. Every spec value, with its R/G tag, is in
+> astronaut + suit is 400 lb; heat-shield health = rating ÷ 24,400 mph; and **reliability rolls are
+> off** (`RELIABILITY_ROLLS = false`). Every spec value, with its R/G tag, is in
 > `src/data/specParts.ts`; every formula is in `src/simulation/formulas.ts`. Spec data is stored in
 > lb and converted to kg once (`src/simulation/units.ts`).
 
