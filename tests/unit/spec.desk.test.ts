@@ -14,9 +14,13 @@ describe('desk sheets', () => {
   it('builds all 15 sheets, each with the formula, the player\'s numbers and a target', () => {
     const { sheets } = sheetsFor();
     expect(sheets.map((x) => x.n)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
-    // spec: 3, 10 and 13 are player-solved; 7, 8, 9, 11, 12, 14, 15 are game-solved
-    for (const n of [3, 10, 13]) expect(sheets.find((x) => x.n === n)!.game).toBeFalsy();
-    for (const n of [7, 8, 9, 11, 12, 14, 15]) expect(sheets.find((x) => x.n === n)!.game).toBe(true);
+    // the player only adds: sheets 1, 2, 6, 10, 15 each have one addition; every other step is the game's
+    for (const x of sheets) {
+      const adds = x.steps.filter((st) => st.kind === 'add');
+      expect(adds.length).toBe([1, 2, 6, 10, 15].includes(x.n) ? 1 : 0);
+      for (const a of adds) expect(a.expect).toBeCloseTo(a.addends!.reduce((t, v) => t + v.value, 0), 6);
+      for (const st of x.steps.filter((q) => q.kind !== 'add')) { expect(st.kind).toBe('game'); expect(st.explain!.length).toBeGreaterThan(5); }
+    }
     for (const x of sheets) { expect(x.formula.length).toBeGreaterThan(5); expect(x.given.length).toBeGreaterThan(0); expect(x.steps.length).toBeGreaterThan(0); expect(x.target.length).toBeGreaterThan(5); }
   });
   it('the answers match the game\'s own physics (within the desk\'s rounding)', () => {
@@ -34,7 +38,8 @@ describe('desk sheets', () => {
     expect(liftoff.steps[1].expect).toBe(2_355_250); // stage 1 full
     expect(liftoff.steps[2].expect).toBe(3_200_000); // 2 boosters
     const twr = sh.find((x) => x.id === 'twr')!;
-    expect(twr.steps[0].expect).toBe(39_440_000); // total push
+    expect(twr.steps[0].expect).toBe(7_440_000); // 4 x 1,860,000 N, multiplied by the game
+    expect(twr.steps.find((st) => st.kind === 'add')!.expect).toBe(39_440_000); // the player adds the push lines
   });
   it('supplies sheet uses 2.0 / 5.5 / 2.2 / 5.27 lb per astronaut per day', () => {
     const { s, sheets } = sheetsFor();
