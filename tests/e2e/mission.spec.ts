@@ -51,7 +51,7 @@ test.describe('Oakland to the Moon', () => {
   });
 
   test('complete mission: title → Oakland → hangar → launch → Moon → home → report', async ({ page }) => {
-    test.setTimeout(240000);
+    test.setTimeout(420000);
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto('/');

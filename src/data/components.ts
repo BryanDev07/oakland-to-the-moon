@@ -76,7 +76,7 @@ export const COMPONENTS: Component[] = [
     id: 'lander_path', slot: 'lander', name: 'Pathfinder Lander', short: 'Pathfinder (3)', sprite: 'lander_path',
     desc: 'Larger lander for 3 crew, ~6 day rated stay, 90 kg sample return.',
     learn: 'More crew on the surface means more EVA hours (more science), but every kg costs propellant during descent AND on the outbound trip.',
-    massKg: 0, costM: 1600, crewCapacity: 3, descentDryKg: 2900, descentPropKg: 11200, ascentDryKg: 2600, ascentPropKg: 3050,
+    massKg: 0, costM: 1450, crewCapacity: 3, descentDryKg: 2900, descentPropKg: 11200, ascentDryKg: 2600, ascentPropKg: 3050,
     ispS: 316, thrustN: 60000, landerBatteryWh: 160000, landerLoadW: 1400, stayRatedH: 150, sampleCapacityKg: 90, reliability: 0.985,
   },
   // ---------------------------------------------------------------- power

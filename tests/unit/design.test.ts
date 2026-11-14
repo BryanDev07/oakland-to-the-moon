@@ -93,4 +93,15 @@ describe('design review', () => {
     expect(go).toBeGreaterThanOrEqual(4);
     expect(lvs.size).toBeGreaterThanOrEqual(2);
   });
+  it('no dead options: every lander and launch vehicle appears in at least one GO design', () => {
+    const lean = cloneDesign(REFERENCE_DESIGN);
+    Object.assign(lean.slots, { propulsion: 'eng_methalox', tank: 'tank_l', lander: 'lander_path', battery: 'bat_12', comms: 'com_sband', storage: 'dat_128', guidance: 'gnc_std' });
+    lean.science = ['sci_samples', 'sci_seismo']; lean.safety = []; lean.plan.lv = 'goldenbear';
+    expect(reviewDesign(lean).go).toBe(true);
+    const bay = cloneDesign(REFERENCE_DESIGN);
+    Object.assign(bay.slots, { propulsion: 'eng_methalox', tank: 'tank_s', comms: 'com_sband', storage: 'dat_128', guidance: 'gnc_std', battery: 'bat_12' });
+    bay.science = ['sci_samples']; bay.safety = []; bay.plan.lv = 'bayhawk';
+    expect(reviewDesign(bay).go).toBe(true);
+    expect(reviewDesign(REFERENCE_DESIGN).stats.parts.some((p) => p.id === 'lander_scout')).toBe(true);
+  });
 });
