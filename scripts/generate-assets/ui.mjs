@@ -7,15 +7,18 @@ function frame({ fill, fill2, light, dark, accent, rivet = true, size = 24 }) {
   const b = new Bitmap(size, size);
   const s = size;
   // fill with vertical gradient
-  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) b.set(x, y, rampDither([fill2, fill], y / (s - 1), x, y));
+  // calm fill for legibility: lighter top band, short dithered transition, flat body
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const t = (y - 5) / 4;
+    b.set(x, y, t <= 0 ? fill2 : t >= 1 ? fill : rampDither([fill2, fill], t, x, y));
+  }
   // outer ink
   b.frame(0, 0, s, s, P.ink);
   // bevel
   b.hline(1, s - 2, 1, light); b.vline(1, 1, s - 2, light);
   b.hline(1, s - 2, s - 2, dark); b.vline(s - 2, 1, s - 2, dark);
-  // inner accent line
-  b.frame(3, 3, s - 6, s - 6, accent);
-  b.hline(4, s - 5, 4, mix(fill2, '#000', 0.35));
+  // inner accent line (panels only; buttons stay clean so short buttons don't strike through text)
+  if (accent) { b.frame(3, 3, s - 6, s - 6, accent); b.hline(4, s - 5, 4, mix(fill2, '#000', 0.35)); }
   // round the outer corners
   for (const [x, y] of [[0, 0], [s - 1, 0], [0, s - 1], [s - 1, s - 1]]) b.clear(x, y);
   for (const [x, y] of [[1, 1], [s - 2, 1], [1, s - 2], [s - 2, s - 2]]) b.set(x, y, P.ink);
@@ -133,10 +136,10 @@ export function buildUI() {
     card: frame({ fill: P.space[3], fill2: P.space[4], light: P.space[6], dark: P.space[1], accent: P.space[5], rivet: false }),
     card_sel: frame({ fill: P.blue[2], fill2: P.blue[3], light: P.gold[6], dark: P.gold[2], accent: P.gold[5], rivet: false }),
     card_bad: frame({ fill: P.red[1], fill2: P.red[2], light: P.red[5], dark: P.red[0], accent: P.red[4], rivet: false }),
-    button: frame({ fill: P.blue[2], fill2: P.blue[4], light: P.blue[7], dark: P.blue[0], accent: P.blue[3], rivet: false }),
-    button_hover: frame({ fill: P.blue[3], fill2: P.blue[5], light: P.gold[7], dark: P.blue[1], accent: P.gold[5], rivet: false }),
-    button_go: frame({ fill: P.orange[2], fill2: P.orange[4], light: P.gold[7], dark: P.orange[0], accent: P.gold[5], rivet: false }),
-    button_off: frame({ fill: P.grey[2], fill2: P.grey[3], light: P.grey[5], dark: P.grey[1], accent: P.grey[3], rivet: false }),
+    button: frame({ fill: P.blue[2], fill2: P.blue[4], light: P.blue[7], dark: P.blue[0], accent: null, rivet: false }),
+    button_hover: frame({ fill: P.blue[3], fill2: P.blue[5], light: P.gold[7], dark: P.blue[1], accent: null, rivet: false }),
+    button_go: frame({ fill: P.orange[2], fill2: P.orange[4], light: P.gold[7], dark: P.orange[0], accent: null, rivet: false }),
+    button_off: frame({ fill: P.grey[2], fill2: P.grey[3], light: P.grey[5], dark: P.grey[1], accent: null, rivet: false }),
     tooltip: frame({ fill: P.space[1], fill2: P.space[2], light: P.gold[6], dark: P.ink, accent: P.space[3], rivet: false }),
   };
   for (const [k, v] of Object.entries(panels)) save(v, `ui/${k}.png`);

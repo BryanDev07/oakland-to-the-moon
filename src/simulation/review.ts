@@ -83,9 +83,9 @@ export function reviewDesign(d: Design): ReviewResult {
     const L = s.lander;
     const descentOk = L.descentDvAvail >= L.descentDvReq, ascentOk = L.ascentDvAvail >= L.ascentDvReq;
     checks.push({
-      id: 'lander_dv', title: 'Lander descent & ascent', icon: 'moon',
+      id: 'lander_dv', title: 'Lander Δv (m/s)', icon: 'moon',
       status: !descentOk || !ascentOk ? 'fail' : L.approachPropKg < 400 ? 'warn' : 'pass',
-      value: `↓${Math.round(L.descentDvAvail)}/${L.descentDvReq}  ↑${Math.round(L.ascentDvAvail)}/${L.ascentDvReq} m/s`,
+      value: `↓${Math.round(L.descentDvAvail)}/${L.descentDvReq} ↑${Math.round(L.ascentDvAvail)}/${L.ascentDvReq}`,
       detail: !descentOk ? 'The lander cannot carry its payload down to the surface.' : !ascentOk ? 'The ascent stage cannot lift crew + max samples back to orbit.' : `${kg(L.approachPropKg)} of propellant left for the final approach & hover.`,
       fix: !descentOk || !ascentOk ? 'Remove surface payload, choose the larger lander, or land fewer crew.' : L.approachPropKg < 400 ? 'Little hover time: pick a smoother site or lighten the lander.' : undefined,
       culprits: !descentOk || !ascentOk ? [slotId('lander'), ...s.parts.filter((p) => p.onLander).map((p) => p.id)] : [],

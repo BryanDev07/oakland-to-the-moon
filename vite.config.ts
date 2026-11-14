@@ -5,7 +5,7 @@ export default defineConfig({
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 2000,
-    rollupOptions: { output: { manualChunks: { phaser: ['phaser'] } } },
+    rollupOptions: { output: { manualChunks: (id: string) => (id.includes('node_modules/phaser') ? 'phaser' : undefined) } },
   },
   server: { port: 5173 },
   test: {
