@@ -5,6 +5,10 @@ import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, panel, txt, W 
 import { evaluate, MissionReport, SCIENCE_FULL_POINTS } from '../../simulation/scoring';
 import { createMission } from '../../simulation/mission';
 import { LV_BY_ID, SITE_BY_ID } from '../../data/mission';
+import { endSummary } from '../../simulation/endSummary';
+
+/** Tab buttons → pages of show(): STORY is page 6 (shown first). */
+const TAB_PAGES = [6, 0, 1, 2, 3, 4];
 
 export class ReportScene extends Phaser.Scene {
   rep!: MissionReport;
@@ -54,9 +58,9 @@ export class ReportScene extends Phaser.Scene {
     if (prev) { const d = rep.overall - prev.score; this.prevNote = `Previous run: ${prev.score} (${prev.grade}), ${d >= 0 ? 'up' : 'down'} ${Math.abs(d)}.`; }
     // right: tabbed details
     panel(this, 180, 4, 296, 236, 'panel');
-    const tabNames = ['SCIENCE', 'SUPPLIES', 'DECISIONS', 'LESSONS', 'HISTORY'];
+    const tabNames = ['STORY', 'SCIENCE', 'SUPPLY', 'CALLS', 'LESSONS', 'HISTORY'];
     let tx = 184;
-    tabNames.forEach((n, i) => { const w = n.length * 6 + 4; const b = new Button(this, tx, 9, n, () => this.show(i), { w, h: 15 }); tx += w + 2; this.tabs.push(b); }); // ends before the fullscreen + gear buttons
+    tabNames.forEach((n, i) => { const w = n.length * 6 + 4; const b = new Button(this, tx, 9, n, () => this.show(TAB_PAGES[i]), { w, h: 15 }); tx += w + 2; this.tabs.push(b); }); // ends before the fullscreen + gear buttons
     this.page = this.add.container(0, 0);
     new Button(this, 180, 244, 'FLY AGAIN', () => this.flyAgain(), { w: 72, h: 22, style: 'go', tooltip: 'Same spacecraft, new launch day (different events).' });
     new Button(this, 256, 244, 'MODIFY DESIGN', () => { store.clearMission(); fadeTo(this, 'Hangar'); }, { w: 104, h: 22, tooltip: 'Back to the hangar with your design preserved.' });
@@ -64,7 +68,7 @@ export class ReportScene extends Phaser.Scene {
     new Button(this, 420, 244, 'CREDITS', () => this.show(5), { w: 56, h: 22 });
     gearButton(this);
     crt(this);
-    this.show(rep.failures.length && !success ? 3 : 0);
+    this.show(6);
     if (!store.seen.chap7) { chapterCard(this, 7, 'MISSION REPORT'); store.markSeen('chap7'); }
   }
   flyAgain() {
@@ -74,7 +78,7 @@ export class ReportScene extends Phaser.Scene {
     fadeTo(this, 'Launch');
   }
   show(i: number, pageNo = 0) {
-    this.tabs.forEach((b, k) => b.setSelected(k === i));
+    this.tabs.forEach((b, k) => b.setSelected(TAB_PAGES[k] === i));
     const P = this.page;
     P.removeAll(true);
     const r = this.rep;
@@ -90,7 +94,15 @@ export class ReportScene extends Phaser.Scene {
       if (pages - 1 !== pageNo) { t.destroy(); y += h + 3; return t; } // on another page
       t.setY(y); P.add(t); y += h + 3; n++; return t;
     };
-    if (i === 0) {
+    if (i === 6) {
+      const es = endSummary(store.mission!, r);
+      line(`YOUR MISSION IS MOST LIKE ${es.like.toUpperCase()}`, C.gold2);
+      line(es.likeWhy, C.white);
+      y += 4; line(es.outcome, r.outcome === 'FULL_SUCCESS' ? C.green : r.outcome === 'MISSION_LOST' ? C.red : C.orange);
+      if (es.margin) line(es.margin, C.white);
+      if (es.costliest) line(`Costliest call: ${es.costliest}`, C.orange);
+      if (es.extra) line(es.extra, C.white);
+    } else if (i === 0) {
       line('SCIENTIFIC ACHIEVEMENTS', C.gold2);
       if (!r.science.length) line('No science returned.', C.dim);
       for (const sc of r.science) { line(`• ${sc.label}: +${sc.points.toFixed(1)}`, C.white); if (sc.detail) line(sc.detail, C.dim, 8); }
