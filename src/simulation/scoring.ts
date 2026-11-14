@@ -3,14 +3,15 @@
  * Science 30%, Crew safety & return 30%, Engineering 20%, Resource efficiency 10%, Budget 10%.
  */
 import { SITE_BY_ID } from '../data/mission';
-import { MAPCAM_MAP_TARGET_MB, NEUTRON_TARGET_H } from './constants';
+import { MAPCAM_MAP_TARGET_MB, NEUTRON_TARGET_H, SPEC_MODEL } from './constants';
 import { securedMB } from './mission';
 import { budgetForM } from './specModel';
-import { SHIELD_ROUGH_RIDE_SAFETY } from '../data/specParts';
+import { SCIENCE_TARGET_POINTS, SHIELD_ROUGH_RIDE_SAFETY } from '../data/specParts';
 import type { MissionState } from './types';
 
 export const WEIGHTS = { science: 0.3, crew: 0.3, engineering: 0.2, resources: 0.1, budget: 0.1 };
-export const SCIENCE_FULL_POINTS = 80;
+/** Spec tab 2: the mission needs 50 science points (G). The original model used 80. */
+export const SCIENCE_FULL_POINTS = SPEC_MODEL ? SCIENCE_TARGET_POINTS.v : 80;
 
 export type Outcome = 'FULL_SUCCESS' | 'PARTIAL_SUCCESS' | 'ABORT_SAFE' | 'MISSION_LOST';
 
@@ -50,7 +51,7 @@ export function scienceBreakdown(s: MissionState): ScienceLine[] {
   }
   for (const [id, pts] of Object.entries(s.surface.points)) {
     if (!pts && id !== 'plaque') continue;
-    const labels: Record<string, string> = { plaque: 'Oakland plaque placed', broadcast: 'Live broadcast to Oakland', seismo: 'Seismic station deployed', samples: 'Geology samples', pancam: 'Panoramic survey', retro: 'Laser retroreflector', regolith: 'Regolith core', skylight: 'Lava-tube skylight survey', ice: 'Polar ice sample' };
+    const labels: Record<string, string> = { plaque: 'Oakland plaque placed', broadcast: 'Live broadcast to Oakland', seismo: 'Seismic station deployed', samples: 'Geology samples', pancam: 'Panoramic survey', retro: 'Laser retroreflector', drill: 'Deep core drilled', gpr: 'Radar map of the subsurface', rover: 'Rover traverse', regolith: 'Regolith core', skylight: 'Lava-tube skylight survey', ice: 'Polar ice sample' };
     if (id === 'samples' && s.samplesAboardKg < s.surface.samplesKg) {
       const kept = s.samplesAboardKg / Math.max(1, s.surface.samplesKg);
       lines.push({ id, label: labels[id], points: pts * kept, detail: `${Math.round(s.samplesAboardKg)} kg returned (${Math.round(s.surface.samplesKg - s.samplesAboardKg)} kg left behind)` });
@@ -99,7 +100,7 @@ export function evaluate(s: MissionState): MissionReport {
 
   let outcome: Outcome;
   if (s.crewLost) outcome = 'MISSION_LOST';
-  else if (returned && landed && scienceScore >= 0.6) outcome = 'FULL_SUCCESS';
+  else if (returned && landed && scienceScore >= (SPEC_MODEL ? 1 : 0.6)) outcome = 'FULL_SUCCESS'; // spec: 50+ points
   else if (returned && (landed || scienceScore >= 0.3)) outcome = 'PARTIAL_SUCCESS';
   else outcome = 'ABORT_SAFE';
   if (outcome !== 'FULL_SUCCESS') overall = Math.min(overall, 79);

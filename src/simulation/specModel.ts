@@ -10,7 +10,7 @@ import type { Design } from '../data/mission';
 import { SITE_BY_ID, TEMPO_BY_ID } from '../data/mission';
 import {
   BUDGETS_USD, CAPSULE_BY_ID, COAST_DAYS, DOCKING, DOCKING_FUEL_LB, FIXES, THRUSTER_FUEL_LB_PER_GAL, LAUNCH_OPS_USD, LANDER_SPEC_BY_ID, MIN_THRUSTERS, MISSION_BASE_MB_PER_DAY, NAV,
-  ORBITS, POWER_PARTS, ROCKET_PRESETS, RocketBuild, SpecDesign, SUPPLIES_USD_PER_CREW_DAY, THRUSTERS, THRUSTER_TANKS, OrbitSpec,
+  INSTRUMENTS, ORBITS, POWER_PARTS, SCIENCE_TARGET_POINTS, ROCKET_PRESETS, RocketBuild, SpecDesign, SUPPLIES_USD_PER_CREW_DAY, THRUSTERS, THRUSTER_TANKS, OrbitSpec,
 } from '../data/specParts';
 import * as K from './constants';
 import { deltaV as dvVe, mbPerDay, moonTwr, shieldHealth } from './formulas';
@@ -83,6 +83,7 @@ export interface SpecStats {
   risks: ActiveRisk[]; tankRisk: ActiveRisk['now'];
   padDelayDays: number;
   budgetM: number;
+  science: { plannedPoints: number; target: number; lines: { id: string; points: number }[] };
 }
 
 /** Refine analyzeDesign()'s stats with the spec model. */
@@ -271,6 +272,16 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
     shieldHealth: health,
     data: { mbPerDay: downMbPerDay, needMbPerDay },
     risks, tankRisk: tankRisk(risks),
+    science: (() => {
+      // planned points if every instrument is used (spec tab 4); surface points scale with the site
+      const mult = SITE_BY_ID[plan.site].scienceMult;
+      const lines = parts.filter((p) => p.slot === 'science').map((p) => {
+        const spec = INSTRUMENTS.find((i) => i.id === p.id);
+        const orbital = p.id === 'sci_mapcam' ? 25 : p.id === 'sci_neutron' ? 10 * mult : 0;
+        return { id: p.id, points: spec ? (lander ? spec.points.v * mult : 0) : orbital };
+      });
+      return { plannedPoints: lines.reduce((a, l) => a + l.points, 0), target: SCIENCE_TARGET_POINTS.v, lines };
+    })(),
     padDelayDays: sp.fixes.includes('leakCheck') ? FIXES.leakCheck.padDays!.v : 0,
     budgetM: budgetForM(d),
   };

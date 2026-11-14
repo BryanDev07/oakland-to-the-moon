@@ -4,7 +4,7 @@
  * Units: mass kg, cost $M, power W (positive = consumption, generation in `genW`), energy Wh.
  */
 import { lbToKg } from '../simulation/units';
-import { SPEC_LANDER_COMPONENTS } from './specComponents';
+import { SPEC_INSTRUMENT_COMPONENTS, SPEC_LANDER_COMPONENTS } from './specComponents';
 
 export type SlotId =
   | 'propulsion' | 'tank' | 'lander' | 'power' | 'battery' | 'comms' | 'storage'
@@ -124,6 +124,7 @@ export const COMPONENTS: Component[] = [
   { id: 'sci_samples', slot: 'science', name: 'Sample Return Kit', short: 'Sample kit', sprite: 'sci_samples', desc: 'Tools and boxes to bring home 100 lb of Moon rock.', learn: 'Returned samples can be studied with lab instruments far beyond anything we can fly. Rocks ride the ascent stage AND the capsule home, so they cost propellant twice.', massKg: lbToKg(30), costM: 15, specTag: 'G', onLander: true, scienceTag: 'samples' },
   { id: 'sci_pancam', slot: 'science', name: 'HD Science Cameras', short: 'HD cameras', sprite: 'sci_pancam', desc: 'Video and photos of the site. 5,000 MB of data per day.', learn: 'Context imaging tells scientists where each sample came from. Cameras make huge amounts of data: a slow radio cannot send it all home.', massKg: lbToKg(15), costM: 5, powerW: 30, dataMBPerDay: 5000, specTag: 'G', onLander: true, scienceTag: 'pancam' },
   { id: 'sci_retro', slot: 'science', name: 'Laser Retroreflector', short: 'Retroreflector', sprite: 'sci_retro', desc: 'A mirror that bounces lasers from Earth to measure the Moon’s distance.', learn: 'Apollo 11’s retroreflector is still used to measure the Earth–Moon distance to millimetres.', massKg: lbToKg(50), costM: 10, specTag: 'G', onLander: true, scienceTag: 'retro' },
+  ...SPEC_INSTRUMENT_COMPONENTS,
 ];
 
 export const SLOTS: { id: SlotId; label: string; icon: string; multi?: boolean; help: string }[] = [

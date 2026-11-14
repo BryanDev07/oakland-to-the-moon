@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, panel, txt, W } from '../ui/ui';
-import { evaluate, MissionReport } from '../../simulation/scoring';
+import { evaluate, MissionReport, SCIENCE_FULL_POINTS } from '../../simulation/scoring';
 import { createMission } from '../../simulation/mission';
 import { LV_BY_ID, SITE_BY_ID } from '../../data/mission';
 
@@ -85,7 +85,7 @@ export class ReportScene extends Phaser.Scene {
       line('SCIENTIFIC ACHIEVEMENTS', C.gold2);
       if (!r.science.length) line('No science returned.', C.dim);
       for (const sc of r.science) { line(`• ${sc.label}: +${sc.points.toFixed(1)}`, C.white); if (sc.detail) line(sc.detail, C.dim, 8); }
-      y += 4; line(`Total ${r.sciencePoints.toFixed(1)} of ${80} points for full marks.`, C.teal);
+      y += 4; line(`Total ${r.sciencePoints.toFixed(1)} of ${SCIENCE_FULL_POINTS} points needed.`, C.teal);
     } else if (i === 1) {
       line('RESOURCES REMAINING', C.gold2);
       for (const res of r.resources) line(`${res.label.padEnd(14, ' ')} ${res.value}`, C.white);

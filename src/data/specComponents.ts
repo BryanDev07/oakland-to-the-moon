@@ -27,3 +27,16 @@ export const SPEC_LANDER_COMPONENTS: Component[] = LANDERS.map((l) => ({
   landerLoadW: LANDER_BASE_LOAD_W.v, stayRatedH: l.maxStayH.v,
   sampleCapacityKg: lbToKg(ROCK_LB),
 }));
+
+/** Spec instruments the original catalogue did not have (tab 4): core drill, radar, rover. */
+const NEW_INSTRUMENTS: Record<string, { short: string; sprite: string; learn: string }> = {
+  sci_drill: { short: 'Core drill', sprite: 'sci_samples', learn: 'Drills draw 300 W: every surface watt has to come from batteries or the surface solar array, for every hour on the surface.' },
+  sci_gpr: { short: 'Ground radar', sprite: 'sci_pancam', learn: 'Radar makes 2,000 MB of data a day: a slow S-band radio cannot send it all home.' },
+  sci_rover: { short: 'Lunar rover', sprite: 'sci_seismo', learn: 'Rovers let Apollo 15-17 crews drive miles from the lander. Heavy (about 460 lb) and power-hungry (500 W).' },
+};
+export const SPEC_INSTRUMENT_COMPONENTS: Component[] = INSTRUMENTS.filter((i) => NEW_INSTRUMENTS[i.id]).map((i) => ({
+  id: i.id, slot: 'science', name: i.name, short: NEW_INSTRUMENTS[i.id].short, sprite: NEW_INSTRUMENTS[i.id].sprite,
+  desc: i.what, learn: NEW_INSTRUMENTS[i.id].learn,
+  massKg: lbToKg(i.weightLb.v), costM: i.priceUsd.v / 1e6, powerW: i.powerW.v || undefined, dataMBPerDay: i.mbPerDay.v,
+  specTag: 'G', onLander: true, scienceTag: i.id.replace('sci_', ''),
+}));
