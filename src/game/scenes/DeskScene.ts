@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, crt, fadeIn, fadeTo, gearButton, modal, onceKey, panel, txt, W, H } from '../ui/ui';
+import { Button, crt, fadeIn, fadeTo, gearButton, modal, modalState, onceKey, panel, txt, W, H } from '../ui/ui';
 import { analyzeDesign, DesignStats } from '../../simulation/spacecraft';
 import { buildSheets, checkAnswer, evalExpr, resultsBoard, Sheet, Step, warmer } from '../../simulation/calcDesk';
 import { specOf } from '../../simulation/specModel';
@@ -17,6 +17,7 @@ export const DESK_REVEAL_PENALTY = 10; // G: points per revealed answer (Hard)
  * The Calculation Desk (JOSEPH_SPEC tab 6), redesigned: the player only adds numbers the game shows;
  * the game works every other step, one line at a time, with a plain-words explanation.
  * Keys: Enter or → next step, ← previous sheet, S skip sheet, digits / Backspace for the sum, Esc settings.
+ * Results board: → / S next page, ← back to the sheets, Enter launch.
  */
 export class DeskScene extends Phaser.Scene {
   stats!: DesignStats;
@@ -52,9 +53,11 @@ export class DeskScene extends Phaser.Scene {
     panel(this, 322, 4, 156, 262, 'panel_dark');
     this.side = this.add.container(0, 0);
     this.input.keyboard?.on('keydown', onceKey((e: KeyboardEvent) => {
+      if (modalState.open) return; // the worked-example popup has the keys
       if (/^[0-9.]$/.test(e.key)) this.key(e.key);
       else if (e.key === '+') this.key('+');
       else if (e.key === 'Backspace') this.key('<');
+      else if (e.key === 'ArrowRight' && this.onBoard()) { this.boardPage++; this.render(); } // board: turn the page
       else if (e.key === 'Enter' || e.key === 'ArrowRight') this.advance();
       else if (e.key === 'ArrowLeft') this.prevSheet();
       else if (e.key === 's' || e.key === 'S') this.skipSheet();

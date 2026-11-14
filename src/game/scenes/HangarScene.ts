@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, icon, iconFrame, kg, Meter, modal, panel, toast, Tooltip, txt, W } from '../ui/ui';
+import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, icon, iconFrame, kg, Meter, modal, modalState, onceKey, panel, toast, Tooltip, txt, W } from '../ui/ui';
 import { SpacecraftView } from '../components/SpacecraftView';
 import { COMPONENT_BY_ID, Component, componentsInSlot, SLOTS, SlotId } from '../../data/components';
 import { cloneDesign, Design, LAUNCH_VEHICLES, REFERENCE_DESIGN, SITES, TEMPOS, LV_BY_ID, SITE_BY_ID } from '../../data/mission';
@@ -98,7 +98,23 @@ export class HangarScene extends Phaser.Scene {
     new Button(this, 436, 218, 'HINT', () => this.hint(), { w: 38, tooltip: 'What should I fix?' });
     this.goBtn = new Button(this, 396, 240, SPEC_MODEL ? 'DESK ▶' : 'REVIEW ▶', () => this.goReview(), { w: 78, h: 22, style: 'go', tooltip: SPEC_MODEL ? 'Calculation Desk, then the GO / NO-GO review' : 'Pre-launch design review (Chapter 3)' });
     this.input.keyboard?.on('keydown-Z', (e: KeyboardEvent) => { if (e.ctrlKey || e.metaKey) this.doUndo(); });
-    this.input.keyboard?.on('keydown-ENTER', () => this.goReview());
+    this.input.keyboard?.on('keydown-ENTER', () => { if (!modalState.open) this.goReview(); });
+    // keyboard: Up / Down walk the systems list; on Mission Style they walk its three rows first,
+    // and Left / Right change the highlighted row's choice
+    this.input.keyboard?.on('keydown', onceKey((e: KeyboardEvent) => {
+      if (modalState.open) return;
+      const cats = this.catRows.map((r) => r.cat);
+      const i = cats.indexOf(this.cat);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const d = e.key === 'ArrowDown' ? 1 : -1;
+        if (this.cat === 'style' && this.styleRow + d >= 0 && this.styleRow + d <= 2) { this.styleRow += d; audio.sfx('move'); this.renderRight(); return; }
+        const next = cats[(i + d + cats.length) % cats.length];
+        if (next === 'style') this.styleRow = d > 0 ? 0 : 2;
+        audio.sfx('move'); this.selectCat(next);
+      } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && this.cat === 'style') {
+        this.styleStep(e.key === 'ArrowRight' ? 1 : -1);
+      }
+    }));
     gearButton(this);
     crt(this);
     this.selectCat('plan');
@@ -210,6 +226,15 @@ export class HangarScene extends Phaser.Scene {
     }
   }
 
+  styleRow = 0; // Mission Style row under keyboard focus: 0 capsule, 1 orbit, 2 architecture
+  styleStep(d: number) {
+    const sp = specOf(this.design);
+    const lists: string[][] = [CAPSULES.map((c) => c.id), ['LLO', 'NRHO'], ['apollo', 'artemis']];
+    const keys = ['capsule', 'orbit', 'architecture'] as const;
+    const list = lists[this.styleRow], cur = sp[keys[this.styleRow]] as string;
+    const v = list[(list.indexOf(cur) + d + list.length) % list.length];
+    this.change(() => { this.design.spec = { ...specOf(this.design), [keys[this.styleRow]]: v } as SpecDesign; });
+  }
   selectCat(c: Cat) {
     this.cat = c;
     Tooltip.hide();
@@ -355,7 +380,8 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
     const sp = specOf(this.design);
     R.add(txt(this, 400, 7, 'MISSION STYLE', { align: 'center', color: C.gold }));
     const row = (y: number, label: string, rundown: string, items: { id: string; label: string; tip: string }[], cur: string, set: (v: string) => void) => {
-      const l = txt(this, x0 + 2, y, label, { color: C.dim });
+      const focus = ['CAPSULE', 'LUNAR ORBIT', 'ARCHITECTURE'].indexOf(label) === this.styleRow;
+      const l = txt(this, x0 + 2, y, `${focus ? '> ' : ''}${label}`, { color: focus ? C.gold2 : C.dim });
       // the detail box may trim; the tooltip always shows the full rundown and numbers
       const show = (t: string) => { this.planDetail(t); Tooltip.show(this, t, { x: 140, y: 150 }); };
       l.setInteractive({ useHandCursor: true }); l.on('pointerover', () => show(rundown)); l.on('pointerout', () => Tooltip.hide());

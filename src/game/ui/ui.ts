@@ -226,11 +226,16 @@ export function onceKey(fn: (e: KeyboardEvent) => void) {
 }
 
 // ----------------------------------------------------------------- Modal (choices)
+/** How many modals are open: scenes ignore their own Enter / arrow keys while one is up. */
+export const modalState = { open: 0 };
 export function modal(scene: Phaser.Scene, opts: { title: string; text: string; learn?: string; options: { label: string; detail?: string; good?: string; bad?: string }[]; alert?: boolean; onChoose: (i: number) => void; width?: number; size?: number }) {
   let chosen = false;
   const choose = (i: number) => { if (chosen) return; chosen = true; cleanup(); opts.onChoose(i); };
+  let btns: Button[] = []; // the option buttons of the current layout (keyboard: Up / Down + Enter)
+  let sel = 0;
   /** Lay the modal out at width w and font size `size`; returns the container and its height. */
   const build = (w: number, size: number) => {
+    btns = [];
     const c = scene.add.container(0, 0).setDepth(900);
     c.add(scene.add.rectangle(0, 0, W, H, 0x04030c, 0.72).setOrigin(0, 0).setInteractive());
     const x = Math.round((W - w) / 2);
@@ -256,6 +261,7 @@ export function modal(scene: Phaser.Scene, opts: { title: string; text: string; 
     if (learn) { learn.setY(cy); c.add(scene.add.image(x + 12, cy - 1, 'icons', iconFrame('science')).setOrigin(0, 0)); cy += learn.height + 10; }
     opts.options.forEach((o, i) => {
       const b = new Button(scene, x + 10, cy, `${i + 1}. ${o.label}`, () => choose(i), { w: w - 20, h: optH[i] - 2 });
+      btns.push(b);
       b.label.setFontSize(size).setMaxWidth(w - 40).setOrigin(0, 0).setX(8).setY(Math.round(4 * lh)).setLeftAlign?.();
       let oy = Math.round(15 * lh);
       for (const t of subs[i]) { t.setPosition(14, oy); b.add(t); oy += t.height; }
@@ -273,10 +279,21 @@ export function modal(scene: Phaser.Scene, opts: { title: string; text: string; 
   if (r.h > H - 8 && base > 10) { r.c.destroy(); r = build(w, 10); }
   if (r.h > H - 8) { r.c.destroy(); r = build(w, 8); }
   const c = pinToScreen(r.c); // stays put in scenes whose camera scrolls (launch, landing)
-  const keyH = onceKey((e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= opts.options.length) { audio.sfx('select'); choose(n - 1); } });
+  const mark = () => btns.forEach((b, i) => b.setSelected(i === sel));
+  mark();
+  const keyH = onceKey((e: KeyboardEvent) => {
+    const n = parseInt(e.key, 10);
+    if (n >= 1 && n <= opts.options.length) { audio.sfx('select'); choose(n - 1); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { sel = (sel + 1) % btns.length; audio.sfx('move'); mark(); }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { sel = (sel + btns.length - 1) % btns.length; audio.sfx('move'); mark(); }
+    else if (e.key === 'Enter') { audio.sfx('select'); choose(sel); }
+  });
   scene.input.keyboard?.on('keydown', keyH);
-  function cleanup() { scene.input.keyboard?.off('keydown', keyH); c.destroy(); }
-  scene.events.once('shutdown', () => scene.input.keyboard?.off('keydown', keyH));
+  modalState.open++;
+  let closed = false;
+  const release = () => { if (!closed) { closed = true; modalState.open = Math.max(0, modalState.open - 1); } };
+  function cleanup() { release(); scene.input.keyboard?.off('keydown', keyH); c.destroy(); }
+  scene.events.once('shutdown', () => { release(); scene.input.keyboard?.off('keydown', keyH); });
   return c;
 }
 
