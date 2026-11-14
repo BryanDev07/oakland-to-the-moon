@@ -5,13 +5,13 @@ import { Button, C, H, panel, txt, W } from '../ui/ui';
 
 const GLOSSARY: [string, string][] = [
   ['Δv (delta-v)', 'Change in velocity a spacecraft can make. Every maneuver costs Δv; propellant buys it.'],
-  ['Isp', 'Specific impulse (s): engine efficiency. Higher Isp = more Δv per kg of propellant.'],
+  ['Exhaust speed', 'How fast gas leaves the nozzle (m/s). Faster = more Δv per lb of fuel. Maker sheets list Isp in seconds: exhaust speed = Isp × 9.81.'],
   ['Rocket equation', 'Δv = Isp·g0·ln(m0/mf). Extra mass needs exponentially more propellant.'],
   ['TLI', 'Trans-lunar injection: the burn (by the rocket) that sends you to the Moon.'],
   ['LOI / TEI', 'Lunar orbit insertion / trans-Earth injection: service-module burns into lunar orbit and back home.'],
   ['Orbit-average power', 'Solar power averaged over an orbit that is ~40% in shadow.'],
   ['W vs Wh', 'Watts are power (a rate). Watt-hours are energy (an amount). Batteries store Wh.'],
-  ['Mbps vs MB', 'Megabits per second is a data RATE; megabytes are an AMOUNT (8 bits = 1 byte).'],
+  ['kbps vs MB', 'Kilobits per second is a data RATE; megabytes are an AMOUNT. MB per day = kbps × 86,400 / 8,000.'],
   ['EVA', 'Extravehicular activity: a spacewalk or moonwalk.'],
   ['Segments', 'Launch, space, ground and science segments must all work together.'],
 ];

@@ -47,7 +47,7 @@ export class BriefingScene extends Phaser.Scene {
   clock!: Phaser.GameObjects.BitmapText;
   labels: Phaser.GameObjects.BitmapText[] = [];
   tele!: Phaser.GameObjects.BitmapText;
-  go() { fadeTo(this, 'Hangar', { tutorial: true }); }
+  go() { fadeTo(this, 'RoleSelect'); } // spec: pick difficulty and specialty before the hangar
   update(_t: number, dt: number) {
     this.t += dt / 1000;
     const g = this.screens; g.clear();

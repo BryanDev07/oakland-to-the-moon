@@ -13,9 +13,9 @@ export const C = {
 export const ICON_NAMES = ['fuel', 'battery', 'power', 'sun', 'o2', 'water', 'comms', 'science', 'mass', 'cost', 'crew', 'warn', 'ok', 'fail', 'clock', 'data', 'thermal', 'guidance', 'safety', 'engine', 'rocket', 'moon', 'earth', 'star', 'lock', 'sample', 'pause', 'play', 'ffwd', 'sound', 'mute', 'gear', 'radiation'];
 export const iconFrame = (n: string) => Math.max(0, ICON_NAMES.indexOf(n));
 
-export interface TxtOpts { color?: number; scale?: 1 | 2 | 3; align?: 'left' | 'center' | 'right'; maxWidth?: number; shadow?: boolean; origin?: [number, number]; depth?: number }
+export interface TxtOpts { color?: number; scale?: 1 | 2 | 3; size?: number; align?: 'left' | 'center' | 'right'; maxWidth?: number; shadow?: boolean; origin?: [number, number]; depth?: number }
 export function txt(scene: Phaser.Scene, x: number, y: number, s: string, o: TxtOpts = {}): Phaser.GameObjects.BitmapText {
-  const t = scene.add.bitmapText(Math.round(x), Math.round(y), 'px', s, 10 * (o.scale ?? 1));
+  const t = scene.add.bitmapText(Math.round(x), Math.round(y), 'px', s, o.size ?? 10 * (o.scale ?? 1));
   if (o.maxWidth) t.setMaxWidth(o.maxWidth);
   t.setTint(o.color ?? C.text);
   if (o.align === 'center') { t.setCenterAlign?.(); t.setOrigin(0.5, 0); }
@@ -57,6 +57,8 @@ export class Button extends Phaser.GameObjects.Container {
     let tx = w / 2;
     if (o.icon) { this.ic = scene.add.image(6, Math.round(h / 2 - 6), 'icons', iconFrame(o.icon)).setOrigin(0, 0); this.add(this.ic); tx = w / 2 + 6; }
     this.label = txt(scene, Math.round(tx), Math.round(h / 2 - 5 * (o.scale ?? 1)) - (o.scale === 2 ? 1 : 0), text, { align: 'center', color: C.white, scale: o.scale ?? 1 });
+    // never clip: a label wider than its button drops to the small font
+    if (this.label.width > w - 4) this.label.setFontSize(8).setY(Math.round(h / 2 - 4));
     this.add(this.label);
     this.setSize(w, h);
     this.onClick = onClick;
@@ -109,7 +111,10 @@ export class Meter extends Phaser.GameObjects.Container {
     g.fillStyle(0xffffff, 0.35).fillRect(1, y + 1, Math.round((w - 2) * f), 1);
     for (let i = 1; i < 10; i++) g.fillStyle(C.ink, 0.5).fillRect(Math.round((w * i) / 10), y + 1, 1, 4);
     if (marker !== undefined) g.fillStyle(C.white).fillRect(Math.round(1 + (w - 2) * Math.max(0, Math.min(1, marker))), y - 1, 1, 8);
-    this.valueText.setText(value).setTint(c === C.red ? C.red : c === C.orange ? C.orange : C.text);
+    this.valueText.setText(value).setFontSize(10).setTint(c === C.red ? C.red : c === C.orange ? C.orange : C.text);
+    // never run into the label: trim at full size (the pixel font is unreadable when scaled down)
+    const room = this.w - (this.labelText.x + this.labelText.width + 4);
+    while (this.valueText.width > room && this.valueText.text.length > 3) this.valueText.setText(this.valueText.text.slice(0, -2) + '…');
     return this;
   }
 }
@@ -119,8 +124,11 @@ export const Tooltip = {
   obj: null as Phaser.GameObjects.Container | null,
   show(scene: Phaser.Scene, text: string, anchor?: { x: number; y: number; width?: number; height?: number; parentContainer?: Phaser.GameObjects.Container | null }) {
     this.hide(scene);
-    const maxW = 170;
+    let maxW = 170;
     const t = txt(scene, 6, 5, text, { maxWidth: maxW - 12, color: C.text });
+    // never clip: widen a long tooltip, then use the small font
+    if (t.height + 11 > H - 4) { maxW = 320; t.setMaxWidth(maxW - 12); }
+    if (t.height + 11 > H - 4) t.setFontSize(8).setMaxWidth(maxW - 12);
     const h = Math.max(18, t.height + 11);
     const c = scene.add.container(0, 0);
     c.add(panel(scene, 0, 0, maxW, h, 'tooltip'));
@@ -130,7 +138,8 @@ export const Tooltip = {
     let x = ax, y = ay + (anchor?.height ?? 0) + 2;
     if (x + maxW > W - 2) x = W - maxW - 2;
     if (y + h > H - 2) y = ay - h - 2;
-    c.setPosition(Math.round(Math.max(2, x)), Math.round(Math.max(2, y))).setDepth(1000);
+    c.setPosition(Math.round(Math.max(2, x)), Math.round(Math.max(2, Math.min(y, H - h - 2)))).setDepth(1000);
+    pinToScreen(c);
     this.obj = c;
   },
   hide(_scene?: Phaser.Scene) { if (this.obj) { this.obj.destroy(); this.obj = null; } },
@@ -207,49 +216,87 @@ export class Dialogue extends Phaser.GameObjects.Container {
   }
 }
 
+/**
+ * Phaser can hand the same browser key event to a 'keydown' listener more than once when keys
+ * arrive quickly (fast typing, scripted input). Wrap handlers so each event is handled once.
+ */
+export function onceKey(fn: (e: KeyboardEvent) => void) {
+  const seen = new WeakSet<KeyboardEvent>();
+  return (e: KeyboardEvent) => { if (seen.has(e)) return; seen.add(e); fn(e); };
+}
+
 // ----------------------------------------------------------------- Modal (choices)
-export function modal(scene: Phaser.Scene, opts: { title: string; text: string; learn?: string; options: { label: string; detail?: string }[]; alert?: boolean; onChoose: (i: number) => void; width?: number }) {
-  const c = scene.add.container(0, 0).setDepth(900);
-  const shade = scene.add.rectangle(0, 0, W, H, 0x04030c, 0.72).setOrigin(0, 0).setInteractive();
-  c.add(shade);
-  const w = opts.width ?? 340;
-  const x = Math.round((W - w) / 2);
-  const body = txt(scene, x + 12, 0, opts.text, { maxWidth: w - 24, color: C.white });
-  const learn = opts.learn ? txt(scene, x + 26, 0, opts.learn, { maxWidth: w - 40, color: C.teal }) : null;
-  const optH = opts.options.map((o) => (o.detail ? 28 : 20));
-  const h = 22 + body.height + 8 + (learn ? learn.height + 10 : 0) + optH.reduce((a, b) => a + b, 0) + 8;
-  const y = Math.round(Math.max(4, (H - h) / 2));
-  const p = panel(scene, x, y, w, h, opts.alert ? 'panel_alert' : 'panel');
-  c.add(p);
-  const title = txt(scene, x + w / 2, y + 7, opts.title, { align: 'center', color: opts.alert ? C.gold2 : C.gold });
-  if (opts.alert) c.add(scene.add.image(x + 8, y + 6, 'icons', iconFrame('warn')).setOrigin(0, 0));
-  body.setY(y + 22);
-  c.add([title, body]);
-  let cy = y + 22 + body.height + 8;
-  if (learn) { learn.setY(cy); c.add(scene.add.image(x + 12, cy - 1, 'icons', iconFrame('science')).setOrigin(0, 0)); c.add(learn); cy += learn.height + 10; }
-  const buttons: Button[] = [];
-  opts.options.forEach((o, i) => {
-    const b = new Button(scene, x + 10, cy, `${i + 1}. ${o.label}`, () => { cleanup(); opts.onChoose(i); }, { w: w - 20, h: optH[i] - 2 });
-    b.label.setOrigin(0, 0).setX(8).setY(4).setLeftAlign?.();
-    if (o.detail) b.add(txt(scene, 14, 15, o.detail, { color: C.blue, maxWidth: w - 44 }));
-    c.add(b); buttons.push(b);
-    cy += optH[i];
-  });
-  const keyH = (e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= opts.options.length) { audio.sfx('select'); cleanup(); opts.onChoose(n - 1); } };
+export function modal(scene: Phaser.Scene, opts: { title: string; text: string; learn?: string; options: { label: string; detail?: string; good?: string; bad?: string }[]; alert?: boolean; onChoose: (i: number) => void; width?: number }) {
+  let chosen = false;
+  const choose = (i: number) => { if (chosen) return; chosen = true; cleanup(); opts.onChoose(i); };
+  /** Lay the modal out at width w and font size `size`; returns the container and its height. */
+  const build = (w: number, size: number) => {
+    const c = scene.add.container(0, 0).setDepth(900);
+    c.add(scene.add.rectangle(0, 0, W, H, 0x04030c, 0.72).setOrigin(0, 0).setInteractive());
+    const x = Math.round((W - w) / 2);
+    const lh = size / 10;
+    const body = txt(scene, x + 12, 0, opts.text, { maxWidth: w - 24, color: C.white, size });
+    const learn = opts.learn ? txt(scene, x + 26, 0, opts.learn, { maxWidth: w - 40, color: C.teal, size }) : null;
+    c.add(body); if (learn) c.add(learn);
+    // option sub-lines: detail (blue), Good (green), Bad (red); heights measured so nothing overlaps
+    const subs = opts.options.map((o) => [
+      ...(o.detail ? [txt(scene, 0, 0, o.detail, { color: C.blue, maxWidth: w - 44, size })] : []),
+      ...(o.good ? [txt(scene, 0, 0, `Good: ${o.good}`, { color: C.green, maxWidth: w - 44, size })] : []),
+      ...(o.bad ? [txt(scene, 0, 0, `Bad: ${o.bad}`, { color: C.red, maxWidth: w - 44, size })] : []),
+    ]);
+    const optH = subs.map((ps) => (ps.length ? Math.round(16 * lh) + ps.reduce((a, t) => a + t.height, 0) + 3 : Math.round(20 * lh)));
+    const h = 22 + body.height + 8 + (learn ? learn.height + 10 : 0) + optH.reduce((a, b) => a + b, 0) + 8;
+    const y = Math.round(Math.max(4, (H - h) / 2));
+    c.addAt(panel(scene, x, y, w, h, opts.alert ? 'panel_alert' : 'panel'), 1);
+    c.add(txt(scene, x + w / 2, y + 7, opts.title, { align: 'center', color: opts.alert ? C.gold2 : C.gold, maxWidth: w - 30 }));
+    if (opts.alert) c.add(scene.add.image(x + 8, y + 6, 'icons', iconFrame('warn')).setOrigin(0, 0));
+    body.setY(y + 22);
+    let cy = y + 22 + body.height + 8;
+    if (learn) { learn.setY(cy); c.add(scene.add.image(x + 12, cy - 1, 'icons', iconFrame('science')).setOrigin(0, 0)); cy += learn.height + 10; }
+    opts.options.forEach((o, i) => {
+      const b = new Button(scene, x + 10, cy, `${i + 1}. ${o.label}`, () => choose(i), { w: w - 20, h: optH[i] - 2 });
+      b.label.setFontSize(size).setMaxWidth(w - 40).setOrigin(0, 0).setX(8).setY(Math.round(4 * lh)).setLeftAlign?.();
+      let oy = Math.round(15 * lh);
+      for (const t of subs[i]) { t.setPosition(14, oy); b.add(t); oy += t.height; }
+      void o;
+      c.add(b);
+      cy += optH[i];
+    });
+    return { c, h };
+  };
+  // Never clip: grow the panel to the screen width first, then fall back to the small font.
+  let w = Math.min(opts.width ?? 340, W - 8);
+  let r = build(w, 10);
+  if (r.h > H - 8 && w < W - 8) { r.c.destroy(); w = W - 8; r = build(w, 10); }
+  if (r.h > H - 8) { r.c.destroy(); r = build(w, 8); }
+  const c = pinToScreen(r.c); // stays put in scenes whose camera scrolls (launch, landing)
+  const keyH = onceKey((e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= opts.options.length) { audio.sfx('select'); choose(n - 1); } });
   scene.input.keyboard?.on('keydown', keyH);
   function cleanup() { scene.input.keyboard?.off('keydown', keyH); c.destroy(); }
   scene.events.once('shutdown', () => scene.input.keyboard?.off('keydown', keyH));
   return c;
 }
 
+/** Pin a container and everything in it to the screen (ignores camera scroll, keeps clicks aligned). */
+export function pinToScreen<T extends Phaser.GameObjects.Container>(c: T): T {
+  c.setScrollFactor(0);
+  c.each((o: Phaser.GameObjects.GameObject) => {
+    (o as unknown as { setScrollFactor?: (v: number) => void }).setScrollFactor?.(0);
+    if (o instanceof Phaser.GameObjects.Container) pinToScreen(o);
+  });
+  return c;
+}
+
 // ----------------------------------------------------------------- Toast (mission control message)
 export function toast(scene: Phaser.Scene, who: string, text: string, portrait = 'portrait_capcom', ms = 4200) {
-  const c = scene.add.container(W - 206, 4).setDepth(800);
+  const c = scene.add.container(W - 206, 21).setDepth(800); // below the SKIP / fullscreen / gear buttons
   const t = txt(scene, 34, 14, text, { maxWidth: 164, color: C.white });
+  if (t.height + 20 > H - 25) t.setFontSize(8).setMaxWidth(164); // never run off the screen
   const h = Math.max(36, t.height + 20);
   c.add(panel(scene, 0, 0, 202, h, 'dialog'));
   const pi = scene.add.image(4, 4, portrait).setOrigin(0, 0).setScale(0.5);
   c.add([pi, txt(scene, 34, 4, who.toUpperCase(), { color: C.gold2 }), t]);
+  pinToScreen(c);
   c.setAlpha(0);
   scene.tweens.add({ targets: c, alpha: 1, duration: 200 });
   scene.time.delayedCall(ms, () => scene.tweens.add({ targets: c, alpha: 0, duration: 300, onComplete: () => c.destroy() }));
@@ -294,10 +341,21 @@ export function chapterCard(scene: Phaser.Scene, num: number, title: string, onD
 
 /** Gear button that opens the pause/settings overlay. */
 export function gearButton(scene: Phaser.Scene, x = W - 18, y = 3) {
+  fullscreenButton(scene, x - 17, y);
   const b = new Button(scene, x, y, '', () => openOverlay(scene), { w: 15, h: 15, icon: 'gear', tooltip: 'Pause, settings & help (Esc)' });
   b.ic?.setX(2).setY(2);
   b.setDepth(1200).setScrollFactor(0);
   scene.input.keyboard?.on('keydown-ESC', () => openOverlay(scene));
+  return b;
+}
+/** Fullscreen toggle (also the F key, see main.ts). Draws four corner brackets. */
+export function fullscreenButton(scene: Phaser.Scene, x: number, y: number) {
+  const b = new Button(scene, x, y, '', () => scene.scale.toggleFullscreen(), { w: 15, h: 15, tooltip: 'Fullscreen on/off (F)' });
+  const g = scene.add.graphics().lineStyle(1, C.white, 1);
+  for (const [cx, cy, dx, dy] of [[3, 3, 1, 1], [11, 3, -1, 1], [3, 11, 1, -1], [11, 11, -1, -1]]) { g.lineBetween(cx, cy, cx + 3 * dx, cy); g.lineBetween(cx, cy, cx, cy + 3 * dy); }
+  b.add(g);
+  b.setDepth(1200).setScrollFactor(0);
+  g.setScrollFactor(0);
   return b;
 }
 export function openOverlay(scene: Phaser.Scene) {
@@ -310,4 +368,5 @@ export function fmtTime(sec: number) {
   const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
   return `${String(d).padStart(2, '0')}d ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
-export const kg = (v: number) => `${Math.round(v).toLocaleString('en-US')} kg`;
+/** Weight for display: the player sees lb (spec A3); internal math stays in kg. */
+export const kg = (v: number) => `${Math.round(v / 0.45359237).toLocaleString('en-US')} lb`;

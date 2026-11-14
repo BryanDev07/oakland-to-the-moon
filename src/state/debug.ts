@@ -4,6 +4,11 @@ import * as Sim from '../simulation/mission';
 import { HOUR } from '../simulation/constants';
 import { store } from './store';
 
+/** Reproducible runs (E2E): the next launch uses this seed instead of the clock. */
+let forced: number | null = null;
+export function forceSeed(n: number | null) { forced = n; }
+export const forcedSeed = () => forced;
+
 export function useReferenceDesign() {
   store.design = cloneDesign(REFERENCE_DESIGN);
   store.saveDesign();

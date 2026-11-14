@@ -8,6 +8,9 @@ import { COMPONENT_BY_ID } from '../../data/components';
 import { SITE_BY_ID } from '../../data/mission';
 import { FREE_RETURN_S, HOUR, TRANSIT_BACK_S, TRANSIT_OUT_S } from '../../simulation/constants';
 import type { MissionState } from '../../simulation/types';
+import { missionDv } from '../../simulation/specModel';
+import { fmt, fmtLb, kgToLb } from '../../simulation/units';
+import { showEmergency } from '../ui/emergency';
 
 const SPEEDS = [0, 12, 48, 192]; // sim steps (5 min each) per real second
 const PHASE_LABEL: Record<string, string> = {
@@ -88,8 +91,8 @@ export class OpsScene extends Phaser.Scene {
     mk('battery', 124, 175, 'BATTERY', 'battery', 'Stored energy (Wh). Drains whenever load exceeds generation, e.g. in the Moon\'s shadow.');
     mk('power', 6, 197, 'POWER', 'power', 'Generation vs electrical load right now (W).');
     mk('heat', 124, 197, 'HEAT', 'thermal', 'Waste heat vs radiator capacity. Over 100% forces instruments off.');
-    mk('o2', 6, 219, 'OXYGEN', 'o2', 'Cabin oxygen remaining (kg). ~0.84 kg per person per day.');
-    mk('water', 124, 219, 'WATER', 'water', 'Drinking water (kg). ~3.5 kg per person per day.');
+    mk('o2', 6, 219, 'OXYGEN', 'o2', 'Cabin oxygen remaining (lb). 2.0 lb per astronaut per day.');
+    mk('water', 124, 219, 'WATER', 'water', 'Drinking + hygiene water (lb). 7.7 lb per astronaut per day.');
     mk('crew', 6, 241, 'CREW', 'crew', 'Crew condition: stress, radiation, rationing and power problems lower it.');
     mk('data', 124, 241, 'STORAGE', 'data', 'Science data on the recorder. Full = new data is lost. Downlink frees space.');
     this.linkText = txt(this, 400, 157, '', { align: 'center', color: C.dim });
@@ -164,7 +167,7 @@ export class OpsScene extends Phaser.Scene {
         break;
       case 'LOI_PENDING': {
         const ok = Sim.canAffordLOIAndReturn(s);
-        act('EXECUTE LUNAR ORBIT INSERTION', () => this.doLOI(), `Brake into lunar orbit: ${SITE_BY_ID[s.design.plan.site].dvLoi} m/s.`, 'go', 220, 150);
+        act('EXECUTE LUNAR ORBIT INSERTION', () => this.doLOI(), `Brake into lunar orbit: ${missionDv(s.design).loi} m/s.`, 'go', 220, 150);
         act('FREE RETURN', () => this.doFreeReturn(), 'Abort: loop around the Moon and come home without landing. Uses almost no propellant.', 'normal', 220, 74, 400);
         if (!ok) this.time.delayedCall(300, () => toast(this, 'Flight Dynamics', 'WARNING: projected propellant is NOT enough to enter orbit AND return. A free-return abort is the safe option.', 'portrait_capcom', 8000));
         this.setSpeed(0);
@@ -175,7 +178,7 @@ export class OpsScene extends Phaser.Scene {
         act('ABORT HOME', () => this.confirmAbortHome(), 'Skip the landing and burn for Earth now.', 'normal', 220, 74, 400);
         break;
       case 'LUNAR_ORBIT_POST':
-        act('EXECUTE TRANS-EARTH INJECTION', () => this.doTEI(), `Burn for home: ${SITE_BY_ID[s.design.plan.site].dvTei} m/s. Keep mapping first if you like.`, 'go');
+        act('EXECUTE TRANS-EARTH INJECTION', () => this.doTEI(), `Burn for home: ${missionDv(s.design).tei} m/s. Keep mapping first if you like.`, 'go');
         break;
       default: break;
     }
@@ -211,7 +214,7 @@ export class OpsScene extends Phaser.Scene {
   }
   doLOI() {
     const r = Sim.executeLOI(this.s);
-    if (!r.ok) { audio.sfx('error'); modal(this, { title: 'NOT ENOUGH PROPELLANT', alert: true, text: `The insertion burn needs ${Math.round(r.propKg)} kg but only ${Math.round(this.s.propKg)} kg remain. The only safe option is a free-return abort.`, options: [{ label: 'Free-return abort' }], onChoose: () => this.doFreeReturn() }); return; }
+    if (!r.ok) { audio.sfx('error'); modal(this, { title: 'NOT ENOUGH PROPELLANT', alert: true, text: `The insertion burn needs ${fmtLb(r.propKg)} but only ${fmtLb(this.s.propKg)} remain. The only safe option is a free-return abort.`, options: [{ label: 'Free-return abort' }], onChoose: () => this.doFreeReturn() }); return; }
     this.burnFx();
     this.setSpeed(1);
     this.onPhase();
@@ -260,19 +263,14 @@ export class OpsScene extends Phaser.Scene {
     const s = this.s;
     const ev = s.pending!;
     this.modalOpen = true;
-    audio.sfx('alarm');
-    if (store.settings.screenShake) this.cameras.main.shake(300, 0.004);
-    modal(this, {
-      title: ev.title, text: ev.text, learn: ev.learn, alert: true,
-      options: ev.options,
-      onChoose: (i) => {
-        const msg = Sim.resolveEvent(s, i);
-        this.modalOpen = false;
-        this.refreshControls();
-        store.saveMission();
-        toast(this, 'Mission Control', msg, 'portrait_director', 5000);
-        if (s.crewLost) this.onPhase();
-      },
+    const legacy = ev.fdPick === undefined;
+    showEmergency(this, s, () => {
+      this.modalOpen = false;
+      this.refreshControls();
+      store.saveMission();
+      const last = s.decisions[s.decisions.length - 1];
+      if (legacy && last?.result) toast(this, 'Mission Control', last.result, 'portrait_director', 5000);
+      this.onPhase();
     });
   }
 
@@ -336,27 +334,27 @@ export class OpsScene extends Phaser.Scene {
     else if (s.phase === 'FREE_RETURN') next = `Earth entry in ${((FREE_RETURN_S - Sim.phaseTime(s)) / HOUR).toFixed(0)} h`;
     else if (s.phase === 'LOI_PENDING') next = 'Decision: insertion burn or free-return abort';
     else if (s.phase === 'LUNAR_ORBIT') { const map = s.instruments['sci_mapcam']; next = `Orbit ${Math.floor(Sim.phaseTime(s) / 7080) + 1}${map ? `  •  map ${Math.min(100, Math.round(Sim.securedMB(s, 'map') / 1440))}%` : ''}`; }
-    else if (s.phase === 'LUNAR_ORBIT_POST') next = `Samples aboard: ${Math.round(s.samplesAboardKg)} kg`;
+    else if (s.phase === 'LUNAR_ORBIT_POST') next = `Samples aboard: ${fmtLb(s.samplesAboardKg)}`;
     this.nextText.setText(next + (s.pending ? '\nAWAITING DECISION' : this.speed === 0 ? '\nPAUSED' : ''));
     // meters
     const burns = Sim.projectBurns(s);
     const need = burns.reduce((a, b) => a + b.propKg, 0);
     const cap = Math.max(1, s.stats.mass.smPropKg);
-    this.meters.fuel.set(s.propKg / cap, `${Math.round(s.propKg).toLocaleString('en-US')} kg${s.propKg < need ? ' SHORT!' : ''}`, s.propKg < need ? C.red : s.propKg < need * 1.06 ? C.orange : C.green, need / cap);
+    this.meters.fuel.set(s.propKg / cap, `${fmtLb(s.propKg)}${s.propKg < need ? ' SHORT!' : ''}`, s.propKg < need ? C.red : s.propKg < need * 1.06 ? C.orange : C.green, need / cap);
     const bf = s.batteryWh / Math.max(1, s.batteryCapWh);
     this.meters.battery.set(bf, `${Math.round(bf * 100)}%`);
     const p = Sim.powerSnapshot(s);
     this.meters.power.set(p.genW / Math.max(p.genW, p.loadW, 1), `${(p.genW / 1000).toFixed(1)}/${(p.loadW / 1000).toFixed(1)} kW`, p.genW >= p.loadW ? C.green : C.orange);
     const hf = p.heatW / Math.max(1, p.rejectW);
     this.meters.heat.set(hf, `${Math.round(hf * 100)}%`, hf > 1 ? C.red : hf > 0.9 ? C.orange : C.green);
-    this.meters.o2.set(s.o2Kg / Math.max(1, s.stats.consumables.o2Kg), `${s.o2Kg.toFixed(1)} kg`);
-    this.meters.water.set(s.waterKg / Math.max(1, s.stats.consumables.waterKg), `${s.waterKg.toFixed(0)} kg${s.rationing ? ' RATION' : ''}`);
+    this.meters.o2.set(s.o2Kg / Math.max(1, s.stats.consumables.o2Kg), `${fmtLb(s.o2Kg)}`);
+    this.meters.water.set(s.waterKg / Math.max(1, s.stats.consumables.waterKg), `${fmtLb(s.waterKg)}${s.rationing ? ' RATION' : ''}`);
     this.meters.crew.set(s.condition / 100, `${Math.round(s.condition)}%${s.condition < 40 ? ' POOR' : ''}`);
     const stored = Object.values(s.storedMB).reduce((a, b) => a + b, 0);
     const df = stored / Math.max(1, s.stats.comms.storageMB);
     this.meters.data.set(1 - df, `${(stored / 1000).toFixed(0)}/${(s.stats.comms.storageMB / 1000).toFixed(0)} GB`, df > 0.95 ? C.red : df > 0.8 ? C.orange : C.green);
     const rate = Sim.linkRateMbps(s);
-    this.linkText.setText(`LINK ${rate > 0 ? rate.toFixed(rate < 1 ? 2 : 0) + ' Mbps' : 'DOWN'} • LOST ${(s.lostMB / 1000).toFixed(0)} GB`).setTint(rate > 0 ? C.dim : C.orange);
+    this.linkText.setText(`LINK ${rate > 0 ? fmt(rate * 1000) + ' kbps' : 'DOWN'} • LOST ${(s.lostMB / 1000).toFixed(0)} GB`).setTint(rate > 0 ? C.dim : C.orange);
     const last = s.log[s.log.length - 1];
     if (last) this.logText.setText(last.text.length > 84 ? last.text.slice(0, 82) + '…' : last.text).setTint(last.kind === 'bad' || last.kind === 'event' ? C.red : last.kind === 'warn' ? C.orange : last.kind === 'good' ? C.green : C.dim);
     // contextual coaching (once each)
@@ -372,3 +370,5 @@ export class OpsScene extends Phaser.Scene {
     void W;
   }
 }
+
+void kgToLb;

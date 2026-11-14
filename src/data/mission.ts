@@ -1,27 +1,33 @@
 /**
  * Mission-planning options: launch vehicles, landing sites, operations tempo.
  * Launch vehicles and agency are FICTIONAL. Δv values are rounded Apollo-era style estimates.
+ * With SPEC_MODEL on, each launch vehicle is a staged rocket built from spec parts
+ * (ROCKET_PRESETS in specParts.ts) and mission Δv comes from the lunar orbit choice (ORBITS).
  */
+import type { SpecDesign } from './specParts';
 export interface LaunchVehicle {
   id: 'bayhawk' | 'estuary' | 'goldenbear';
   name: string;
   short: string;
-  tliCapacityKg: number; // payload mass deliverable to trans-lunar injection
+  tliCapacityKg: number; // payload mass deliverable to trans-lunar injection (spec: rocket-equation result for the preset, kept in sync by a unit test)
   costM: number;
-  reliability: number; // success probability; drives chance of upper-stage underperformance event
+  reliability: number; // success probability (library data; the underperformance roll is off, see RELIABILITY_ROLLS)
   desc: string;
   learn: string;
 }
 
+/** Preset Moon payload (t) and rocket cost ($M), from stack.ts; checked by tests/unit/spec.model.test.ts. */
+const BAYHAWK_T = 46.5, BAYHAWK_M = 354, ESTUARY_T = 50.8, ESTUARY_M = 463, GOLDENBEAR_T = 71.6, GOLDENBEAR_M = 724;
+
 export const LAUNCH_VEHICLES: LaunchVehicle[] = [
-  { id: 'bayhawk', name: 'Bayhawk-M', short: 'Bayhawk-M', tliCapacityKg: 38500, costM: 850, reliability: 0.985,
-    desc: 'Medium lift. Cheapest, many flights of heritage, but only 38.5 t to the Moon.',
+  { id: 'bayhawk', name: 'Bayhawk-M', short: 'Bayhawk-M', tliCapacityKg: BAYHAWK_T * 1000, costM: BAYHAWK_M, reliability: 0.985,
+    desc: `Medium lift: 10 BE-4 engines, 4 GEM 63XL boosters, 4 RL10s on top. Cheapest, but only ${BAYHAWK_T} t to the Moon.`,
     learn: 'A smaller rocket is cheaper and more proven, but forces a lighter spacecraft.' },
-  { id: 'estuary', name: 'Estuary Heavy', short: 'Estuary Heavy', tliCapacityKg: 45000, costM: 1350, reliability: 0.98,
-    desc: 'Core stage + two side boosters. 45 t to trans-lunar injection.',
+  { id: 'estuary', name: 'Estuary Heavy', short: 'Estuary Heavy', tliCapacityKg: ESTUARY_T * 1000, costM: ESTUARY_M, reliability: 0.98,
+    desc: `Core stage + two SLS-style side boosters. ${ESTUARY_T} t to trans-lunar injection.`,
     learn: 'Strap-on boosters add thrust at liftoff and are dropped when empty (staging).' },
-  { id: 'goldenbear', name: 'Golden Bear SHLV', short: 'Golden Bear', tliCapacityKg: 56000, costM: 1850, reliability: 0.97,
-    desc: 'Super heavy lift. 56 t to the Moon, but new and expensive.',
+  { id: 'goldenbear', name: 'Golden Bear SHLV', short: 'Golden Bear', tliCapacityKg: GOLDENBEAR_T * 1000, costM: GOLDENBEAR_M, reliability: 0.97,
+    desc: `Super heavy lift: four SLS-style boosters. ${GOLDENBEAR_T} t to the Moon, but expensive.`,
     learn: 'More capability costs money and a newer vehicle carries more risk of underperformance.' },
 ];
 
@@ -72,24 +78,34 @@ export interface Design {
   safety: string[];
   science: string[];
   plan: MissionPlan;
+  spec?: Partial<SpecDesign>; // JOSEPH_SPEC choices (capsule, orbit, architecture, rocket, ...); defaults fill the rest
 }
 
 export const DEFAULT_PLAN: MissionPlan = { lv: 'estuary', site: 'equator', crew: 3, stayDays: 2, tempo: 'balanced', lunarOrbitDays: 1 };
 
-/** Starting baseline: a deliberately UNFINISHED design (no lander picked, small tanks) to teach the builder. */
+/** Apollo-style choices shared by the reference and baseline designs (spec tab 2). */
+const APOLLO_SPEC: Partial<SpecDesign> = {
+  architecture: 'apollo', orbit: 'LLO', capsule: 'cap_apollo', rocket: null,
+  docking: ['dock_nds', 'dock_lidar'], thruster: 'rcs_mr107s', thrusterCount: 12, thrusterTank: 'tank_antrix516',
+  nav: ['nav_st16', 'nav_imu', 'nav_obc'], landerPacks: 2, landerSolar: true, fixes: [], difficulty: 'easy', role: null,
+};
+
+/** Starting baseline: a deliberately UNFINISHED design (rocket too small for the stack) to teach the builder. */
 export const BASELINE_DESIGN: Design = {
-  slots: { propulsion: 'eng_hyper', tank: 'tank_s', lander: 'lander_scout', power: 'pwr_solar6', battery: 'bat_12', comms: 'com_sband', storage: 'dat_128', lifeSupport: 'ls_open', thermal: 'thr_std', heatShield: 'hs_std', guidance: 'gnc_std' },
+  slots: { propulsion: 'eng_hyper', tank: 'tank_s', lander: 'lander_apollo', power: 'pwr_solar6', battery: 'bat_12', comms: 'com_sband', storage: 'dat_128', lifeSupport: 'ls_open', thermal: 'thr_std', heatShield: 'hs_std', guidance: 'gnc_std' },
   safety: [],
   science: ['sci_samples'],
-  plan: { ...DEFAULT_PLAN },
+  plan: { ...DEFAULT_PLAN, lv: 'bayhawk' },
+  spec: { ...APOLLO_SPEC },
 };
 
 /** A known-good reference design used by tests and the "Suggested build" helper. */
 export const REFERENCE_DESIGN: Design = {
-  slots: { propulsion: 'eng_methalox', tank: 'tank_m', lander: 'lander_scout', power: 'pwr_solar6', battery: 'bat_24', comms: 'com_hga', storage: 'dat_1t', lifeSupport: 'ls_open', thermal: 'thr_std', heatShield: 'hs_std', guidance: 'gnc_trn' },
+  slots: { propulsion: 'eng_methalox', tank: 'tank_m', lander: 'lander_apollo', power: 'pwr_solar6', battery: 'bat_24', comms: 'com_hga', storage: 'dat_1t', lifeSupport: 'ls_open', thermal: 'thr_std', heatShield: 'hs_std', guidance: 'gnc_trn' },
   safety: ['saf_shelter'],
   science: ['sci_mapcam', 'sci_samples', 'sci_seismo', 'sci_pancam'],
   plan: { ...DEFAULT_PLAN },
+  spec: { ...APOLLO_SPEC },
 };
 
 export const LV_BY_ID = Object.fromEntries(LAUNCH_VEHICLES.map((v) => [v.id, v])) as Record<LaunchVehicle['id'], LaunchVehicle>;

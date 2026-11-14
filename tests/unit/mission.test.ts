@@ -93,7 +93,8 @@ describe('power, comms & data', () => {
   });
   it('a full recorder loses new data', () => {
     const d = cloneDesign(REFERENCE_DESIGN); d.slots.storage = 'dat_128'; d.slots.comms = 'com_sband';
-    const s = createMission(d, 4); coast(s); executeLOI(s);
+    const s = createMission(d, 4); s.schedule = []; // no emergencies: this test is about the recorder
+    coast(s); executeLOI(s);
     for (let i = 0; i < 12 * 30; i++) {
       if (s.pending) resolveEvent(s, 1);
       s.instruments['sci_mapcam'].on = !s.instruments['sci_mapcam'].failed;

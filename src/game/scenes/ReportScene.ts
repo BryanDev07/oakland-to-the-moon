@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, panel, txt, W } from '../ui/ui';
-import { evaluate, MissionReport } from '../../simulation/scoring';
+import { evaluate, MissionReport, SCIENCE_FULL_POINTS } from '../../simulation/scoring';
 import { createMission } from '../../simulation/mission';
 import { LV_BY_ID, SITE_BY_ID } from '../../data/mission';
 
@@ -55,8 +55,9 @@ export class ReportScene extends Phaser.Scene {
     } else txt(this, 90, 248, 'First recorded mission!', { align: 'center', color: C.dim });
     // right: tabbed details
     panel(this, 180, 4, 296, 236, 'panel');
-    const tabNames = ['SCIENCE', 'RESOURCES', 'DECISIONS', 'LESSONS', 'HISTORY'];
-    tabNames.forEach((n, i) => { const b = new Button(this, 186 + i * 57, 9, n, () => this.show(i), { w: 55, h: 15 }); this.tabs.push(b); });
+    const tabNames = ['SCIENCE', 'SUPPLIES', 'DECISIONS', 'LESSONS', 'HISTORY'];
+    let tx = 184;
+    tabNames.forEach((n, i) => { const w = n.length * 6 + 4; const b = new Button(this, tx, 9, n, () => this.show(i), { w, h: 15 }); tx += w + 2; this.tabs.push(b); }); // ends before the fullscreen + gear buttons
     this.page = this.add.container(0, 0);
     new Button(this, 180, 244, 'FLY AGAIN', () => this.flyAgain(), { w: 72, h: 22, style: 'go', tooltip: 'Same spacecraft, new launch day (different events).' });
     new Button(this, 256, 244, 'MODIFY DESIGN', () => { store.clearMission(); fadeTo(this, 'Hangar'); }, { w: 104, h: 22, tooltip: 'Back to the hangar with your design preserved.' });
@@ -73,28 +74,43 @@ export class ReportScene extends Phaser.Scene {
     store.saveMission();
     fadeTo(this, 'Launch');
   }
-  show(i: number) {
+  show(i: number, pageNo = 0) {
     this.tabs.forEach((b, k) => b.setSelected(k === i));
     const P = this.page;
     P.removeAll(true);
     const r = this.rep;
     const x = 188;
     let y = 30;
-    const line = (text: string, color: number = C.text, indent = 0) => { const t = txt(this, x + indent, y, text, { color, maxWidth: 280 - indent }); P.add(t); y += t.height + 3; return t; };
+    const BOTTOM = 226; // keep the page inside its panel (room left for MORE)
+    let n = 0, pages = 1;
+    // Never clip and never shrink the pixel font: lines that do not fit flow onto the next page.
+    const line = (text: string, color: number = C.text, indent = 0) => {
+      const t = txt(this, x + indent, y, text, { color, maxWidth: 280 - indent });
+      const h = t.height;
+      if (y + h > BOTTOM) { pages++; y = 30; n = 0; }
+      if (pages - 1 !== pageNo) { t.destroy(); y += h + 3; return t; } // on another page
+      t.setY(y); P.add(t); y += h + 3; n++; return t;
+    };
     if (i === 0) {
       line('SCIENTIFIC ACHIEVEMENTS', C.gold2);
       if (!r.science.length) line('No science returned.', C.dim);
       for (const sc of r.science) { line(`• ${sc.label}: +${sc.points.toFixed(1)}`, C.white); if (sc.detail) line(sc.detail, C.dim, 8); }
-      y += 4; line(`Total ${r.sciencePoints.toFixed(1)} of ${80} points for full marks.`, C.teal);
+      y += 4; line(`Total ${r.sciencePoints.toFixed(1)} of ${SCIENCE_FULL_POINTS} points needed.`, C.teal);
     } else if (i === 1) {
       line('RESOURCES REMAINING', C.gold2);
       for (const res of r.resources) line(`${res.label.padEnd(14, ' ')} ${res.value}`, C.white);
       y += 6; line('SCORE DETAILS', C.gold2);
       for (const p of r.parts) line(`${p.label}: ${p.note}`, C.text);
     } else if (i === 2) {
-      line('CRITICAL DECISIONS', C.gold2);
+      line(`DECISION LOG  (seed ${r.seed})`, C.gold2);
+      line(`* = Flight Director pick.  Bonus +${r.fdBonus}.  Mission points ${r.missionPoints.toLocaleString('en-US')}.`, C.teal);
+      if (r.retries) line(`Landing retries: ${r.retries}${store.mission?.design.spec?.difficulty === 'hard' ? ` (-100 points each)` : ' (free on Easy)'}`, C.orange);
       if (!r.decisions.length) line('No emergencies required a decision.', C.dim);
-      for (const d of r.decisions) { line(`• ${d.event}`, C.orange); line(`→ ${d.choice}`, C.white, 8); }
+      for (const d of r.decisions) {
+        line(`${d.fd ? '*' : '•'} ${d.event}`, C.orange);
+        line(`→ ${d.choice}`, C.white, 8);
+        if (d.bad) line(`Cost: ${d.bad}`, C.red, 8);
+      }
       if (r.failures.length) { y += 4; line('PROBLEMS & FAILURE CAUSES', C.gold2); for (const f of r.failures) line(`• ${f}`, C.red); }
     } else if (i === 3) {
       line('RECOMMENDED IMPROVEMENTS', C.gold2);
@@ -112,6 +128,8 @@ export class ReportScene extends Phaser.Scene {
       line('Engineering references: NASA mission design resources (see SOURCES.md).', C.white);
       line('From the Town to the Stars.', C.gold);
     }
+    void n;
+    if (pages > 1) P.add(new Button(this, 404, 226, `MORE ${pageNo + 1}/${pages} ▶`, () => this.show(i, (pageNo + 1) % pages), { w: 70, h: 14 }));
     void W;
   }
 }

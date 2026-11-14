@@ -3,7 +3,7 @@ import { analyzeDesign } from '../../src/simulation/spacecraft';
 import { reviewDesign } from '../../src/simulation/review';
 import { BASELINE_DESIGN, REFERENCE_DESIGN, cloneDesign, LAUNCH_VEHICLES, SITES } from '../../src/data/mission';
 import { COMPONENT_BY_ID, componentsInSlot } from '../../src/data/components';
-import * as K from '../../src/simulation/constants';
+import { budgetForM } from '../../src/simulation/specModel';
 
 const status = (d: any, id: string) => reviewDesign(d).checks.find((c) => c.id === id)?.status;
 
@@ -23,9 +23,11 @@ describe('mass & budget', () => {
   });
   it('flags over-budget designs as blocking', () => {
     const d = cloneDesign(REFERENCE_DESIGN);
-    d.plan.lv = 'goldenbear'; d.slots.lander = 'lander_path'; d.slots.power = 'pwr_solar11'; d.slots.lifeSupport = 'ls_regen'; d.safety = ['saf_redund', 'saf_shelter'];
+    // Artemis-style (two Golden Bear launches) loaded with premium systems: over the Hard budget ($4.2B, G)
+    d.plan.lv = 'goldenbear'; d.slots.lander = 'lander_hls'; d.plan.crew = 4; d.slots.power = 'pwr_solar11'; d.slots.lifeSupport = 'ls_regen'; d.safety = ['saf_redund', 'saf_shelter'];
+    d.spec = { ...d.spec, difficulty: 'hard', architecture: 'artemis', orbit: 'NRHO', capsule: 'cap_orion' };
     const r = reviewDesign(d);
-    expect(r.stats.costM).toBeGreaterThan(K.BUDGET_M);
+    expect(r.stats.costM).toBeGreaterThan(budgetForM(d));
     expect(status(d, 'budget')).toBe('fail');
     expect(r.go).toBe(false);
   });
@@ -37,11 +39,13 @@ describe('design review', () => {
     expect(r.blocking).toBe(0);
     expect(r.go).toBe(true);
   });
-  it('baseline design needs work (insufficient propellant)', () => {
+  it('baseline design needs work (rocket too small for the stack)', () => {
+    // spec model: the capsule supplies the service-module fuel; the baseline's Bayhawk-M cannot
+    // push the Apollo-style stack to 12,600 m/s
     const r = reviewDesign(BASELINE_DESIGN);
-    expect(status(BASELINE_DESIGN, 'propulsion')).toBe('fail');
+    expect(status(BASELINE_DESIGN, 'launch_mass')).toBe('fail');
     expect(r.go).toBe(false);
-    expect(r.checks.find((c) => c.id === 'propulsion')!.culprits).toContain('tank_s');
+    expect(r.checks.find((c) => c.id === 'launch_mass')!.fix).toBeTruthy();
   });
   it('excessive mass fails the launch-mass check and names heavy components', () => {
     const d = cloneDesign(REFERENCE_DESIGN); d.plan.lv = 'bayhawk'; d.slots.tank = 'tank_l'; d.slots.lander = 'lander_path';
@@ -73,7 +77,7 @@ describe('design review', () => {
     const d = cloneDesign(REFERENCE_DESIGN); d.slots.comms = 'com_sband'; d.slots.storage = 'dat_128';
     expect(status(d, 'comms')).toBe('warn');
   });
-  it('3 crew on the Scout lander: 2 land, 1 stays in orbit', () => {
+  it('3 crew on a 2-seat lander: 2 land, 1 stays in orbit', () => {
     const s = analyzeDesign(REFERENCE_DESIGN);
     expect(s.landingCrew).toBe(2); expect(s.orbitCrew).toBe(1);
   });
@@ -95,13 +99,19 @@ describe('design review', () => {
   });
   it('no dead options: every lander and launch vehicle appears in at least one GO design', () => {
     const lean = cloneDesign(REFERENCE_DESIGN);
-    Object.assign(lean.slots, { propulsion: 'eng_methalox', tank: 'tank_l', lander: 'lander_path', battery: 'bat_12', comms: 'com_sband', storage: 'dat_128', guidance: 'gnc_std' });
+    Object.assign(lean.slots, { lander: 'lander_path', battery: 'bat_12', comms: 'com_sband', storage: 'dat_128', guidance: 'gnc_std' });
     lean.science = ['sci_samples', 'sci_seismo']; lean.safety = []; lean.plan.lv = 'goldenbear';
     expect(reviewDesign(lean).go).toBe(true);
     const bay = cloneDesign(REFERENCE_DESIGN);
-    Object.assign(bay.slots, { propulsion: 'eng_methalox', tank: 'tank_s', comms: 'com_sband', storage: 'dat_128', guidance: 'gnc_std', battery: 'bat_12' });
-    bay.science = ['sci_samples']; bay.safety = []; bay.plan.lv = 'bayhawk';
+    Object.assign(bay.slots, { lander: 'lander_scout', comms: 'com_sband', storage: 'dat_128', guidance: 'gnc_std', battery: 'bat_12' });
+    bay.science = ['sci_samples']; bay.safety = []; bay.plan.lv = 'bayhawk'; bay.spec = { ...bay.spec, landerPacks: 0 };
     expect(reviewDesign(bay).go).toBe(true);
-    expect(reviewDesign(REFERENCE_DESIGN).stats.parts.some((p) => p.id === 'lander_scout')).toBe(true);
+    // Extended LM: the spec's G split leaves its ascent stage no room for rock (rover/drill science instead)
+    const xlm = cloneDesign(REFERENCE_DESIGN); xlm.slots.lander = 'lander_xlm'; xlm.science = ['sci_mapcam', 'sci_seismo', 'sci_pancam'];
+    expect(reviewDesign(xlm).go).toBe(true);
+    const art = cloneDesign(REFERENCE_DESIGN); art.slots.lander = 'lander_hls'; art.plan.lv = 'goldenbear'; art.plan.crew = 4; delete art.slots.power;
+    art.spec = { ...art.spec, architecture: 'artemis', orbit: 'NRHO', capsule: 'cap_orion' };
+    expect(reviewDesign(art).go).toBe(true);
+    expect(reviewDesign(REFERENCE_DESIGN).stats.parts.some((p) => p.id === 'lander_apollo')).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { fmtLb } from '../../simulation/units';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, crt, Dialogue, fadeIn, fadeTo, gearButton, H, panel, toast, txt, W } from '../ui/ui';
@@ -27,7 +28,7 @@ export class ReturnScene extends Phaser.Scene {
     this.plasma = this.add.sprite(232, 118, 'plasma').play('plasma').setAngle(-35).setScale(1.1);
     panel(this, 4, 4, 150, 54, 'panel_dark');
     this.hud = txt(this, 10, 9, '', { color: C.green });
-    new Button(this, W - 74, 4, 'SKIP ▶▶', () => this.skip(), { w: 52 }).setDepth(1200);
+    new Button(this, W - 92, 4, 'SKIP ▶▶', () => this.skip(), { w: 52 }).setDepth(1200);
     gearButton(this);
     crt(this);
     audio.loop('wind', 0.7);
@@ -82,7 +83,7 @@ export class ReturnScene extends Phaser.Scene {
       this.tweens.add({ targets: ship, x: 360, duration: 3000, ease: 'Sine.Out' });
       this.time.delayedCall(3800, () => { this.cameras.main.fadeOut(500); this.cameras.main.once('camerafadeoutcomplete', () => this.homecoming()); });
     } });
-    new Button(this, W - 74, 4, 'SKIP ▶▶', () => this.skip(), { w: 52 }).setDepth(1200);
+    new Button(this, W - 92, 4, 'SKIP ▶▶', () => this.skip(), { w: 52 }).setDepth(1200);
     crt(this);
   }
   homecoming() {
@@ -109,10 +110,10 @@ export class ReturnScene extends Phaser.Scene {
     const d = new Dialogue(this);
     d.play([
       { who: 'Auntie Dee', text: 'There she is! Commander Kai Alvarado, back from the Moon! So... did you bring my rock?', portrait: 'portrait_dee' },
-      { who: 'Commander Kai', text: samples > 0 ? `We brought home ${samples} kg of them, Auntie Dee. They go to the scientists first. But I saved you a photo of your plaque up there.` : 'No rocks this time, Auntie Dee. But we learned what to do better, and next time we will.', portrait: 'portrait_kai' },
+      { who: 'Commander Kai', text: samples > 0 ? `We brought home ${fmtLb(s.samplesAboardKg)} of them, Auntie Dee. They go to the scientists first. But I saved you a photo of your plaque up there.` : 'No rocks this time, Auntie Dee. But we learned what to do better, and next time we will.', portrait: 'portrait_kai' },
       { who: 'Director Cole', text: 'Welcome home, Commander. Let us see how the mission scored. Every flight teaches the next one.', portrait: 'portrait_director' },
     ], () => fadeTo(this, 'Report'));
-    new Button(this, W - 74, 4, 'SKIP ▶▶', () => fadeTo(this, 'Report'), { w: 52 }).setDepth(1200);
+    new Button(this, W - 92, 4, 'SKIP ▶▶', () => fadeTo(this, 'Report'), { w: 52 }).setDepth(1200);
     crt(this);
   }
   skip() {

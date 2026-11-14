@@ -5,7 +5,10 @@ import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, iconFrame, kg,
 import { reviewDesign, ReviewCheck, ReviewResult } from '../../simulation/review';
 import { COMPONENT_BY_ID } from '../../data/components';
 import { LV_BY_ID, SITE_BY_ID, TEMPO_BY_ID } from '../../data/mission';
+import { SPEC_MODEL } from '../../simulation/constants';
+import { fmtLb, fmtUsdM } from '../../simulation/units';
 import { createMission } from '../../simulation/mission';
+import { forcedSeed } from '../../state/debug';
 
 export class ReviewScene extends Phaser.Scene {
   r!: ReviewResult;
@@ -25,14 +28,19 @@ export class ReviewScene extends Phaser.Scene {
     txt(this, 154, 9, 'CHAPTER 3: COUNTDOWN — DESIGN REVIEW', { align: 'center', color: C.gold });
     const verdict = r.go ? (r.warnings ? 'GO WITH RISKS' : 'ALL SYSTEMS GO') : 'NO-GO';
     txt(this, 154, 21, `${verdict}: ${r.blocking} blocking, ${r.warnings} warning${r.warnings === 1 ? '' : 's'}`, { align: 'center', color: r.go ? (r.warnings ? C.orange : C.green) : C.red });
+    const pitch = Math.min(17, Math.floor(228 / Math.max(1, r.checks.length))); // fit every check on screen
+    const pad = Math.max(0, Math.floor((pitch - 13) / 2));
     r.checks.forEach((c, i) => {
-      const y = 34 + i * 17;
-      const bg = this.add.rectangle(8, y, 292, 16, c.status === 'fail' ? 0x7a1626 : c.status === 'warn' ? 0x6a2808 : 0x16545c, 0.45).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+      const y = 34 + i * pitch;
+      const bg = this.add.rectangle(8, y, 292, pitch - 1, c.status === 'fail' ? 0x7a1626 : c.status === 'warn' ? 0x6a2808 : 0x16545c, 0.45).setOrigin(0, 0).setInteractive({ useHandCursor: true });
       this.rows.push(bg);
-      this.add.image(11, y + 2, 'icons', iconFrame(c.icon)).setOrigin(0, 0);
-      txt(this, 26, y + 4, c.title, { color: C.white });
-      txt(this, 270, y + 4, c.value, { align: 'right', color: C.dim });
-      this.add.image(284, y + 2, 'icons', iconFrame(c.status === 'pass' ? 'ok' : c.status === 'warn' ? 'warn' : 'fail')).setOrigin(0, 0);
+      this.add.image(11, y + pad, 'icons', iconFrame(c.icon)).setOrigin(0, 0);
+      const title = txt(this, 26, y + pad + 2, c.title, { color: C.white });
+      const value = txt(this, 270, y + pad + 2, c.value, { align: 'right', color: C.dim });
+      // never overlap: trim at full size (the full text is in the detail panel)
+      const room = 270 - (26 + title.width + 6);
+      while (value.width > room && value.text.length > 4) value.setText(value.text.slice(0, -2) + '…');
+      this.add.image(284, y + pad, 'icons', iconFrame(c.status === 'pass' ? 'ok' : c.status === 'warn' ? 'warn' : 'fail')).setOrigin(0, 0);
       // status as words too (not colour alone)
       bg.on('pointerover', () => { audio.sfx('move'); this.showDetail(c, i); });
       bg.on('pointerup', () => this.showDetail(c, i));
@@ -47,8 +55,8 @@ export class ReviewScene extends Phaser.Scene {
       `Crew     ${s.crew} (${s.landingCrew} land)`,
       `Stay     ${p.stayDays} d, ${TEMPO_BY_ID[p.tempo].name}`,
       `Duration ${s.missionDays.toFixed(1)} days`,
-      `Mass     ${kg(s.mass.tliKg)}`,
-      `Cost     $${s.costM.toLocaleString('en-US')}M`,
+      `Mass     ${SPEC_MODEL ? fmtLb(s.mass.tliKg) : kg(s.mass.tliKg)}`,
+      `Cost     ${SPEC_MODEL ? fmtUsdM(s.costM) : `$${s.costM.toLocaleString('en-US')}M`}`,
       `Δv need  ${Math.round(s.propulsion.dvRequired)} m/s`,
     ].join('\n'), { color: C.text });
     panel(this, 308, 118, 168, 120, 'panel_dark');
@@ -93,8 +101,9 @@ export class ReviewScene extends Phaser.Scene {
       });
     });
     this.time.delayedCall(220 * calls.length + 700, () => {
-      const seed = (Date.now() % 1000000) | 0;
+      const seed = forcedSeed() ?? ((Date.now() % 1000000) | 0);
       store.mission = createMission(store.design, seed);
+      if (store.mission.em) store.mission.em.deskPenalty = store.deskPenalty; // Calculation Desk reveals
       store.saveMission();
       fadeTo(this, 'Launch');
     });

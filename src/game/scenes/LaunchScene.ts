@@ -3,6 +3,9 @@ import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, crt, fadeIn, fadeTo, gearButton, H, panel, toast, txt, W } from '../ui/ui';
 import { LV_BY_ID } from '../../data/mission';
+import * as Sim from '../../simulation/mission';
+import type { Stage } from '../../simulation/deck';
+import { showEmergency } from '../ui/emergency';
 import { SpacecraftView } from '../components/SpacecraftView';
 
 const SKY_H = 810, GROUND = 792;
@@ -20,6 +23,7 @@ export class LaunchScene extends Phaser.Scene {
   done = false;
   lvId = 'estuary';
   s1h = 0; s2h = 0;
+  paused = false; launchChecked = false;
   constructor() { super('Launch'); }
   create() {
     fadeIn(this);
@@ -63,7 +67,7 @@ export class LaunchScene extends Phaser.Scene {
     this.hud = txt(this, 10, 9, '', { color: C.green }).setScrollFactor(0);
     this.count = txt(this, W / 2, 70, '', { align: 'center', color: C.gold2, scale: 3 }).setScrollFactor(0).setDepth(100);
     txt(this, W - 6, H - 12, `${LV_BY_ID[this.lvId as 'estuary'].name} • ${m.design.plan.crew} crew aboard`, { align: 'right', color: C.dim }).setScrollFactor(0);
-    new Button(this, W - 74, 4, 'SKIP ▶▶', () => this.finish(), { w: 52, tooltip: 'Skip the launch cinematic' }).setScrollFactor(0).setDepth(1200);
+    new Button(this, W - 92, 4, 'SKIP ▶▶', () => this.finish(), { w: 52, tooltip: 'Skip the launch cinematic' }).setScrollFactor(0).setDepth(1200);
     gearButton(this);
     crt(this);
     const lines: [number, string, string][] = [
@@ -71,13 +75,31 @@ export class LaunchScene extends Phaser.Scene {
       [-6.2, 'Commander Kai', 'Oakland, this one is for you. See you on the other side of the sky.'],
     ];
     for (const [at, who, text] of lines) this.time.delayedCall((at + 10) * 1000, () => toast(this, who, text, who.startsWith('Commander') ? 'portrait_kai_suit' : 'portrait_capcom', 3000));
+    this.paused = false; this.launchChecked = false;
+    this.runCards(['pad'], () => undefined); // emergency deck: pad card plays first
+  }
+  /** Play any scheduled emergency cards for these stages, pausing the cinematic while they are open. */
+  runCards(stages: Stage[], then: () => void) {
+    const m = store.mission!;
+    for (const st of stages) if (Sim.triggerStage(m, st)) {
+      this.paused = true;
+      audio.loop('rumble', 0);
+      showEmergency(this, m, () => {
+        this.paused = false;
+        store.saveMission();
+        if (m.phase === 'COMPLETE' || m.crewLost) { this.done = true; fadeTo(this, 'Report'); } else this.runCards(stages, then);
+      });
+      return;
+    }
+    then();
   }
   smoke(x: number, y: number, spread: number) {
     const s = this.add.sprite(x + Phaser.Math.Between(-4, 4), y, 'smoke').setDepth(5).play('smoke');
     this.tweens.add({ targets: s, x: x + Phaser.Math.Between(-spread, spread), y: y + Phaser.Math.Between(-10, 6), scale: Phaser.Math.FloatBetween(1.2, 2.2), alpha: 0, duration: 1600, onComplete: () => s.destroy() });
   }
   update(_t: number, dtMs: number) {
-    if (this.done) return;
+    if (this.done || this.paused) return;
+    if (!this.launchChecked && this.t > 6) { this.launchChecked = true; this.runCards(['launch'], () => undefined); if (this.paused) return; }
     const dt = dtMs / 1000;
     this.t += dt;
     const t = this.t;
@@ -176,11 +198,12 @@ export class LaunchScene extends Phaser.Scene {
       : 'Upper stage burn complete. TOWN-1 is on a three-day coast to the Moon.', { align: 'center', maxWidth: 260, color: m.flags.tliTrimDv > 0 ? C.orange : C.white });
     if (m.flags.tliTrimDv > 0) audio.sfx('warn');
     this.time.delayedCall(4200, () => { audio.loop('rumble', 0); store.markSeen('launch'); fadeTo(this, 'Ops'); });
-    new Button(this, W - 74, 4, 'SKIP ▶▶', () => { audio.loop('rumble', 0); fadeTo(this, 'Ops'); }, { w: 52 }).setDepth(1200);
+    new Button(this, W - 92, 4, 'SKIP ▶▶', () => { audio.loop('rumble', 0); fadeTo(this, 'Ops'); }, { w: 52 }).setDepth(1200);
     crt(this);
   }
   finish() {
+    if (this.paused) return; // an emergency is open
     audio.loop('rumble', 0);
-    if (!this.done) { this.done = true; this.tliCinematic(); } else fadeTo(this, 'Ops');
+    if (!this.done) { this.runCards(['launch', 'earthOrbit'], () => { if (this.done) return; this.done = true; this.tliCinematic(); }); } else fadeTo(this, 'Ops');
   }
 }
