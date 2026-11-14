@@ -314,7 +314,7 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
     const swap = lines.length ? txt(this, 328, y0 + 10, lines.join('\n'), { maxWidth: 144, color: C.orange }) : null;
     if (swap) D.add(swap);
     const top = y0 + 10 + (swap ? swap.height + 1 : 0);
-    const body = txt(this, 328, top, `${engine.trim() ? engine.trim() + '\n' : ''}${comp.desc}`, { maxWidth: 144, color: C.text });
+    const body = txt(this, 328, top, `${engine.trim() ? engine.trim() + '\n' : ''}${comp.desc}`, { maxWidth: 144, color: C.white, size: 15 });
     D.add(body);
     while (top + body.height > 212 && body.text.length > 12) body.setText(body.text.replace(/\s*\S+…?$/, '…'));
     // educational note (hover for full), on the title line
@@ -392,7 +392,7 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
   planDetail(text: string) {
     this.detail.removeAll(true);
     this.detail.add(this.add.rectangle(326, 155, 148, 1, C.gold, 0.6).setOrigin(0, 0));
-    const t = txt(this, 328, 158, text, { maxWidth: 144, color: C.text });
+    const t = txt(this, 328, 158, text, { maxWidth: 144, color: C.white, size: 15 });
     while (158 + t.height > 212 && t.text.length > 12) t.setText(t.text.replace(/\s*\S+…?$/, '…')); // never clip
     this.detail.add(t);
   }

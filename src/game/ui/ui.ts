@@ -124,11 +124,11 @@ export const Tooltip = {
   obj: null as Phaser.GameObjects.Container | null,
   show(scene: Phaser.Scene, text: string, anchor?: { x: number; y: number; width?: number; height?: number; parentContainer?: Phaser.GameObjects.Container | null }) {
     this.hide(scene);
-    let maxW = 170;
-    const t = txt(scene, 6, 5, text, { maxWidth: maxW - 12, color: C.text });
+    let maxW = 280;
+    const t = txt(scene, 6, 5, text, { maxWidth: maxW - 12, color: C.white, size: 15 });
     // never clip: widen a long tooltip, then use the small font
-    if (t.height + 11 > H - 4) { maxW = 320; t.setMaxWidth(maxW - 12); }
-    if (t.height + 11 > H - 4) t.setFontSize(8).setMaxWidth(maxW - 12);
+    if (t.height + 11 > H - 4) { maxW = W - 8; t.setMaxWidth(maxW - 12); }
+    if (t.height + 11 > H - 4) t.setFontSize(10).setMaxWidth(maxW - 12);
     const h = Math.max(18, t.height + 11);
     const c = scene.add.container(0, 0);
     c.add(panel(scene, 0, 0, maxW, h, 'tooltip'));
@@ -226,7 +226,7 @@ export function onceKey(fn: (e: KeyboardEvent) => void) {
 }
 
 // ----------------------------------------------------------------- Modal (choices)
-export function modal(scene: Phaser.Scene, opts: { title: string; text: string; learn?: string; options: { label: string; detail?: string; good?: string; bad?: string }[]; alert?: boolean; onChoose: (i: number) => void; width?: number }) {
+export function modal(scene: Phaser.Scene, opts: { title: string; text: string; learn?: string; options: { label: string; detail?: string; good?: string; bad?: string }[]; alert?: boolean; onChoose: (i: number) => void; width?: number; size?: number }) {
   let chosen = false;
   const choose = (i: number) => { if (chosen) return; chosen = true; cleanup(); opts.onChoose(i); };
   /** Lay the modal out at width w and font size `size`; returns the container and its height. */
@@ -245,13 +245,14 @@ export function modal(scene: Phaser.Scene, opts: { title: string; text: string; 
       ...(o.bad ? [txt(scene, 0, 0, `Bad: ${o.bad}`, { color: C.red, maxWidth: w - 44, size })] : []),
     ]);
     const optH = subs.map((ps) => (ps.length ? Math.round(16 * lh) + ps.reduce((a, t) => a + t.height, 0) + 3 : Math.round(20 * lh)));
-    const h = 22 + body.height + 8 + (learn ? learn.height + 10 : 0) + optH.reduce((a, b) => a + b, 0) + 8;
+    const top = size > 10 ? 28 : 22;
+    const h = top + body.height + 8 + (learn ? learn.height + 10 : 0) + optH.reduce((a, b) => a + b, 0) + 8;
     const y = Math.round(Math.max(4, (H - h) / 2));
     c.addAt(panel(scene, x, y, w, h, opts.alert ? 'panel_alert' : 'panel'), 1);
-    c.add(txt(scene, x + w / 2, y + 7, opts.title, { align: 'center', color: opts.alert ? C.gold2 : C.gold, maxWidth: w - 30 }));
+    c.add(txt(scene, x + w / 2, y + 7, opts.title, { align: 'center', color: opts.alert ? C.gold2 : C.gold, maxWidth: w - 30, size: Math.max(10, size) }));
     if (opts.alert) c.add(scene.add.image(x + 8, y + 6, 'icons', iconFrame('warn')).setOrigin(0, 0));
-    body.setY(y + 22);
-    let cy = y + 22 + body.height + 8;
+    body.setY(y + top);
+    let cy = y + top + body.height + 8;
     if (learn) { learn.setY(cy); c.add(scene.add.image(x + 12, cy - 1, 'icons', iconFrame('science')).setOrigin(0, 0)); cy += learn.height + 10; }
     opts.options.forEach((o, i) => {
       const b = new Button(scene, x + 10, cy, `${i + 1}. ${o.label}`, () => choose(i), { w: w - 20, h: optH[i] - 2 });
@@ -264,10 +265,12 @@ export function modal(scene: Phaser.Scene, opts: { title: string; text: string; 
     });
     return { c, h };
   };
-  // Never clip: grow the panel to the screen width first, then fall back to the small font.
-  let w = Math.min(opts.width ?? 340, W - 8);
-  let r = build(w, 10);
-  if (r.h > H - 8 && w < W - 8) { r.c.destroy(); w = W - 8; r = build(w, 10); }
+  // Readable first (15 px). Never clip: grow to the screen width, then step the font down.
+  const base = opts.size ?? 15;
+  let w = Math.min(Math.max(opts.width ?? 340, base > 10 ? 400 : 0), W - 8);
+  let r = build(w, base);
+  if (r.h > H - 8 && w < W - 8) { r.c.destroy(); w = W - 8; r = build(w, base); }
+  if (r.h > H - 8 && base > 10) { r.c.destroy(); r = build(w, 10); }
   if (r.h > H - 8) { r.c.destroy(); r = build(w, 8); }
   const c = pinToScreen(r.c); // stays put in scenes whose camera scrolls (launch, landing)
   const keyH = onceKey((e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= opts.options.length) { audio.sfx('select'); choose(n - 1); } });
@@ -289,11 +292,11 @@ export function pinToScreen<T extends Phaser.GameObjects.Container>(c: T): T {
 
 // ----------------------------------------------------------------- Toast (mission control message)
 export function toast(scene: Phaser.Scene, who: string, text: string, portrait = 'portrait_capcom', ms = 4200) {
-  const c = scene.add.container(W - 206, 21).setDepth(800); // below the SKIP / fullscreen / gear buttons
-  const t = txt(scene, 34, 14, text, { maxWidth: 164, color: C.white });
-  if (t.height + 20 > H - 25) t.setFontSize(8).setMaxWidth(164); // never run off the screen
-  const h = Math.max(36, t.height + 20);
-  c.add(panel(scene, 0, 0, 202, h, 'dialog'));
+  const c = scene.add.container(W - 256, 21).setDepth(800); // below the SKIP / fullscreen / gear buttons
+  const t = txt(scene, 34, 15, text, { maxWidth: 214, color: C.white, size: 15 });
+  if (t.height + 20 > H - 25) t.setFontSize(10).setMaxWidth(214); // never run off the screen
+  const h = Math.max(36, t.height + 21);
+  c.add(panel(scene, 0, 0, 252, h, 'dialog'));
   const pi = scene.add.image(4, 4, portrait).setOrigin(0, 0).setScale(0.5);
   c.add([pi, txt(scene, 34, 4, who.toUpperCase(), { color: C.gold2 }), t]);
   pinToScreen(c);
@@ -322,7 +325,7 @@ export function fadeIn(scene: Phaser.Scene, ms = 350) {
 /** CRT polish: subtle scanlines + vignette, fixed to camera, above everything. */
 export function crt(scene: Phaser.Scene) {
   const v = scene.add.image(0, 0, 'vignette').setOrigin(0, 0).setScrollFactor(0).setDepth(2000);
-  const s = scene.add.tileSprite(0, 0, W, H, 'scanline').setOrigin(0, 0).setScrollFactor(0).setDepth(2001);
+  const s = scene.add.tileSprite(0, 0, W, H, 'scanline').setOrigin(0, 0).setScrollFactor(0).setDepth(2001).setAlpha(0.35); // light: keeps text contrast
   s.setVisible(store.settings.scanlines);
   return { v, s };
 }

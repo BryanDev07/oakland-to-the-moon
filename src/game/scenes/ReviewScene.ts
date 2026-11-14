@@ -76,14 +76,21 @@ export class ReviewScene extends Phaser.Scene {
     this.rows.forEach((row, k) => row.setStrokeStyle(k === i ? 1 : 0, C.gold));
     this.detail.removeAll(true);
     const D = this.detail;
-    const status = c.status === 'pass' ? 'PASS' : c.status === 'warn' ? 'WARNING (acceptable risk)' : 'BLOCKING';
-    D.add(txt(this, 314, 123, c.title.toUpperCase(), { color: C.gold2, maxWidth: 156 }));
-    D.add(txt(this, 314, 133, status, { color: c.status === 'pass' ? C.green : c.status === 'warn' ? C.orange : C.red }));
-    const body = txt(this, 314, 145, c.detail, { maxWidth: 156, color: C.text });
+    const status = c.status === 'pass' ? 'PASS' : c.status === 'warn' ? 'WARNING' : 'BLOCKING';
+    const head = txt(this, 314, 122, c.title.toUpperCase(), { color: C.gold2, maxWidth: 156, size: 15 });
+    D.add(head);
+    let y = 122 + head.height + 1;
+    const st = txt(this, 314, y, status, { color: c.status === 'pass' ? C.green : c.status === 'warn' ? C.orange : C.red, size: 15, maxWidth: 156 });
+    D.add(st); y += st.height + 2;
+    // 15 px, trimmed to the panel; hover the panel for everything
+    const full = `${c.detail}${c.fix ? `\nFIX: ${c.fix}` : ''}${c.culprits.length ? `\nInvolved: ${c.culprits.map((id) => COMPONENT_BY_ID[id]?.short ?? id).join(', ')}` : ''}`;
+    const body = txt(this, 314, y, c.fix && c.status !== 'pass' ? `FIX: ${c.fix}` : c.detail, { maxWidth: 156, color: c.fix && c.status !== 'pass' ? C.teal : C.white, size: 15 });
+    while (y + body.height > 236 && body.text.length > 12) body.setText(body.text.replace(/\s*\S+…?$/, '…'));
     D.add(body);
-    let y = 145 + body.height + 4;
-    if (c.fix) { const f = txt(this, 314, y, 'FIX: ' + c.fix, { maxWidth: 156, color: C.teal }); D.add(f); y += f.height + 4; }
-    if (c.culprits.length) D.add(txt(this, 314, Math.min(y, 226), 'Involved: ' + c.culprits.map((id) => COMPONENT_BY_ID[id]?.short ?? id).join(', '), { maxWidth: 156, color: C.orange }));
+    const hit = this.add.rectangle(310, 120, 164, 116, 0, 0).setOrigin(0, 0).setInteractive();
+    hit.on('pointerover', () => Tooltip.show(this, full, { x: 20, y: 60 }));
+    hit.on('pointerout', () => Tooltip.hide());
+    D.add(hit);
   }
   poll() {
     if (this.polling || !this.r.go) return;

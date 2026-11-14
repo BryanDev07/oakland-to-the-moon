@@ -9,6 +9,7 @@ import { LV_BY_ID, SITE_BY_ID } from '../../data/mission';
 export class ReportScene extends Phaser.Scene {
   rep!: MissionReport;
   page!: Phaser.GameObjects.Container;
+  prevNote = '';
   tabs: Button[] = [];
   constructor() { super('Report'); }
   create() {
@@ -32,27 +33,25 @@ export class ReportScene extends Phaser.Scene {
     // left column: outcome + score
     panel(this, 4, 4, 172, 262, 'panel');
     txt(this, 90, 9, 'CHAPTER 7: MISSION REPORT', { align: 'center', color: C.gold });
-    const patch = this.add.image(90, 66, 'patch');
+    const patch = this.add.image(90, 64, 'patch');
     if (success) this.tweens.add({ targets: patch, angle: 360, duration: 1200, ease: 'Cubic.Out' });
     const oc = rep.outcome === 'FULL_SUCCESS' ? C.green : rep.outcome === 'MISSION_LOST' ? C.red : C.orange;
-    txt(this, 90, 116, rep.outcomeLabel, { align: 'center', color: oc, maxWidth: 160 });
-    txt(this, 52, 127, String(rep.overall), { align: 'center', color: C.white, scale: 2 });
-    txt(this, 52, 148, 'SCORE /100', { align: 'center', color: C.dim });
-    txt(this, 130, 127, rep.grade, { align: 'center', color: oc, scale: 2 });
-    txt(this, 130, 148, `ENG. ${rep.engineeringGrade}`, { align: 'center', color: C.teal });
+    const ol = txt(this, 90, 114, rep.outcomeLabel, { align: 'center', color: oc, maxWidth: 164, size: 15 });
+    const sy = 114 + ol.height + 2;
+    txt(this, 12, sy, `${rep.overall}/100`, { color: C.white, scale: 2 });
+    txt(this, 168, sy, rep.grade, { align: 'right', color: oc, scale: 2 });
     // category bars
+    const short: Record<string, string> = { science: 'Science', crew: 'Crew safety', engineering: 'Engineering', resources: 'Resources', budget: 'Budget' };
+    const by = sy + 26;
     rep.parts.forEach((p, i) => {
-      const y = 162 + i * 16;
-      txt(this, 10, y, `${p.label} (${Math.round(p.weight * 100)}%)`, { color: C.text });
+      const y = by + i * 17;
+      txt(this, 10, y, `${short[p.key]} ${Math.round(p.weight * 100)}%`, { color: C.white, size: 15 });
       const g = this.add.graphics();
-      g.fillStyle(C.ink).fillRect(10, y + 10, 160, 4);
-      g.fillStyle(p.score >= 0.7 ? C.green : p.score >= 0.4 ? C.orange : C.red).fillRect(10, y + 10, Math.round(160 * p.score), 4);
-      txt(this, 170, y, `${Math.round(p.score * 100)}`, { align: 'right', color: C.dim });
+      g.fillStyle(C.ink).fillRect(10, y + 14, 160, 2);
+      g.fillStyle(p.score >= 0.7 ? C.green : p.score >= 0.4 ? C.orange : C.red).fillRect(10, y + 14, Math.round(160 * p.score), 2);
+      txt(this, 170, y, `${Math.round(p.score * 100)}`, { align: 'right', color: p.score >= 0.7 ? C.green : p.score >= 0.4 ? C.orange : C.red, size: 15 });
     });
-    if (prev) {
-      const d = rep.overall - prev.score;
-      txt(this, 90, 248, `Previous run: ${prev.score} (${prev.grade})  ${d >= 0 ? '↑' : '↓'}${Math.abs(d)}`, { align: 'center', color: d >= 0 ? C.green : C.orange });
-    } else txt(this, 90, 248, 'First recorded mission!', { align: 'center', color: C.dim });
+    if (prev) { const d = rep.overall - prev.score; this.prevNote = `Previous run: ${prev.score} (${prev.grade}), ${d >= 0 ? 'up' : 'down'} ${Math.abs(d)}.`; }
     // right: tabbed details
     panel(this, 180, 4, 296, 236, 'panel');
     const tabNames = ['SCIENCE', 'SUPPLIES', 'DECISIONS', 'LESSONS', 'HISTORY'];
@@ -85,7 +84,7 @@ export class ReportScene extends Phaser.Scene {
     let n = 0, pages = 1;
     // Never clip and never shrink the pixel font: lines that do not fit flow onto the next page.
     const line = (text: string, color: number = C.text, indent = 0) => {
-      const t = txt(this, x + indent, y, text, { color, maxWidth: 280 - indent });
+      const t = txt(this, x + indent, y, text, { color: color === C.dim ? C.text : color, maxWidth: 280 - indent, size: 15 });
       const h = t.height;
       if (y + h > BOTTOM) { pages++; y = 30; n = 0; }
       if (pages - 1 !== pageNo) { t.destroy(); y += h + 3; return t; } // on another page
@@ -119,6 +118,7 @@ export class ReportScene extends Phaser.Scene {
       for (const l of r.lessons) line(`• ${l}`, C.teal);
     } else if (i === 4) {
       line('MISSION HISTORY (this device)', C.gold2);
+      if (this.prevNote) line(this.prevNote, C.teal);
       for (const h of store.history.slice(0, 9)) line(`${h.score.toString().padStart(3)} ${h.grade}  ${h.outcome.slice(0, 18).padEnd(18)} ${h.site}, ${h.lv}`, C.white);
     } else {
       line('CREDITS', C.gold2);
