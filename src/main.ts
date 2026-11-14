@@ -13,12 +13,13 @@ import { SurfaceScene } from './game/scenes/SurfaceScene';
 import { ReturnScene } from './game/scenes/ReturnScene';
 import { ReportScene } from './game/scenes/ReportScene';
 import { RoleSelectScene } from './game/scenes/RoleSelectScene';
+import { DeskScene } from './game/scenes/DeskScene';
 import { store } from './state/store';
 import { audio } from './game/audio/audio';
 import * as debug from './state/debug';
 import { emergencyUI } from './game/ui/emergency';
 
-const scenes: Phaser.Types.Scenes.SceneType[] = [BootScene, TitleScene, IntroScene, BriefingScene, RoleSelectScene, HangarScene, ReviewScene, LaunchScene, OpsScene, LandingScene, SurfaceScene, ReturnScene, ReportScene, OverlayScene];
+const scenes: Phaser.Types.Scenes.SceneType[] = [BootScene, TitleScene, IntroScene, BriefingScene, RoleSelectScene, HangarScene, DeskScene, ReviewScene, LaunchScene, OpsScene, LandingScene, SurfaceScene, ReturnScene, ReportScene, OverlayScene];
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

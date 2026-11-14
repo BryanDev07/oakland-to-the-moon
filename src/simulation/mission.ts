@@ -543,7 +543,7 @@ export function executeTEI(s: MissionState) {
 export function performEntry(s: MissionState) {
   if (s.phase !== 'ENTRY') return { ok: false, margin: 0, load: 0 };
   if (K.SPEC_MODEL && s.stats.spec) {
-    // health = rating ÷ 24,400 mph (max 100%) − damage; earlier anomalies count as damage (G)
+    // health = rating / 24,400 mph (max 100%) − damage; earlier anomalies count as damage (G)
     const mph = s.stats.spec.capsule.shieldMph;
     const health = shieldHealth(mph, Math.max(0, s.entryDispersion - 1) + (s.em?.shieldDamage ?? 0)); // + emergency damage (card 14)
     const res = shieldResult(health);

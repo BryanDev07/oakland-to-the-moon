@@ -11,7 +11,7 @@ const GLOSSARY: [string, string][] = [
   ['LOI / TEI', 'Lunar orbit insertion / trans-Earth injection: service-module burns into lunar orbit and back home.'],
   ['Orbit-average power', 'Solar power averaged over an orbit that is ~40% in shadow.'],
   ['W vs Wh', 'Watts are power (a rate). Watt-hours are energy (an amount). Batteries store Wh.'],
-  ['kbps vs MB', 'Kilobits per second is a data RATE; megabytes are an AMOUNT. MB per day = kbps × 86,400 ÷ 8,000.'],
+  ['kbps vs MB', 'Kilobits per second is a data RATE; megabytes are an AMOUNT. MB per day = kbps × 86,400 / 8,000.'],
   ['EVA', 'Extravehicular activity: a spacewalk or moonwalk.'],
   ['Segments', 'Launch, space, ground and science segments must all work together.'],
 ];

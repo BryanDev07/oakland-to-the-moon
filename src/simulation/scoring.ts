@@ -161,7 +161,7 @@ export function evaluate(s: MissionState): MissionReport {
     ],
     decisions: s.decisions.map((d) => ({ event: d.event, choice: d.choice, fd: !!d.fd, good: d.good, bad: d.bad, result: d.result })),
     fdBonus: E?.fdBonus ?? 0,
-    missionPoints: Math.round(overall) * 10 + (E?.fdBonus ?? 0),
+    missionPoints: Math.round(overall) * 10 + (E?.fdBonus ?? 0) - (E?.deskPenalty ?? 0),
     failures, recommendations: recs, lessons,
     date: new Date().toISOString(),
     seed: s.seed,

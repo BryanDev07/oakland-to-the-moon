@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, crt, fadeIn, fadeTo, gearButton, txt, W } from '../ui/ui';
+import { Button, C, crt, fadeIn, fadeTo, gearButton, onceKey, txt, W } from '../ui/ui';
 import { ROLES } from '../../data/roles';
 import { BUDGETS_USD, Difficulty, RoleId } from '../../data/specParts';
 import { specOf } from '../../simulation/specModel';
@@ -56,7 +56,7 @@ export class RoleSelectScene extends Phaser.Scene {
     new Button(this, W - 100, 240, 'CONFIRM ▶', () => this.go(), { w: 92, h: 22, style: 'go', tooltip: 'Head to the hangar (Enter)' });
 
     const kb = this.input.keyboard;
-    kb?.on('keydown', (e: KeyboardEvent) => {
+    kb?.on('keydown', onceKey((e: KeyboardEvent) => {
       const n = Number(e.key);
       if (n >= 1 && n <= ROLES.length) this.pick(ROLES[n - 1].id);
       const idx = ROLES.findIndex((r) => r.id === this.role);
@@ -65,7 +65,7 @@ export class RoleSelectScene extends Phaser.Scene {
       if (e.key === 'e' || e.key === 'E') this.setDiff('easy');
       if (e.key === 'h' || e.key === 'H') this.setDiff('hard');
       if (e.key === 'Enter') this.go();
-    });
+    }));
     gearButton(this);
     crt(this);
     this.refresh();

@@ -216,6 +216,15 @@ export class Dialogue extends Phaser.GameObjects.Container {
   }
 }
 
+/**
+ * Phaser can hand the same browser key event to a 'keydown' listener more than once when keys
+ * arrive quickly (fast typing, scripted input). Wrap handlers so each event is handled once.
+ */
+export function onceKey(fn: (e: KeyboardEvent) => void) {
+  const seen = new WeakSet<KeyboardEvent>();
+  return (e: KeyboardEvent) => { if (seen.has(e)) return; seen.add(e); fn(e); };
+}
+
 // ----------------------------------------------------------------- Modal (choices)
 export function modal(scene: Phaser.Scene, opts: { title: string; text: string; learn?: string; options: { label: string; detail?: string; good?: string; bad?: string }[]; alert?: boolean; onChoose: (i: number) => void; width?: number }) {
   let chosen = false;
@@ -261,7 +270,7 @@ export function modal(scene: Phaser.Scene, opts: { title: string; text: string; 
   if (r.h > H - 8 && w < W - 8) { r.c.destroy(); w = W - 8; r = build(w, 10); }
   if (r.h > H - 8) { r.c.destroy(); r = build(w, 8); }
   const c = pinToScreen(r.c); // stays put in scenes whose camera scrolls (launch, landing)
-  const keyH = (e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= opts.options.length) { audio.sfx('select'); choose(n - 1); } };
+  const keyH = onceKey((e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= opts.options.length) { audio.sfx('select'); choose(n - 1); } });
   scene.input.keyboard?.on('keydown', keyH);
   function cleanup() { scene.input.keyboard?.off('keydown', keyH); c.destroy(); }
   scene.events.once('shutdown', () => scene.input.keyboard?.off('keydown', keyH));

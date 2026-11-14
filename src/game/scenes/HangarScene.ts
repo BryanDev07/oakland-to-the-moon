@@ -94,7 +94,7 @@ export class HangarScene extends Phaser.Scene {
     this.summary = txt(this, 322, 220, '', { color: C.dim, maxWidth: 70 });
     this.undoBtn = new Button(this, 396, 218, 'UNDO', () => this.doUndo(), { w: 38, tooltip: 'Undo last change (Ctrl+Z)' });
     new Button(this, 436, 218, 'HINT', () => this.hint(), { w: 38, tooltip: 'What should I fix?' });
-    this.goBtn = new Button(this, 396, 240, 'REVIEW ▶', () => this.goReview(), { w: 78, h: 22, style: 'go', tooltip: 'Pre-launch design review (Chapter 3)' });
+    this.goBtn = new Button(this, 396, 240, SPEC_MODEL ? 'DESK ▶' : 'REVIEW ▶', () => this.goReview(), { w: 78, h: 22, style: 'go', tooltip: SPEC_MODEL ? 'Calculation Desk, then the GO / NO-GO review' : 'Pre-launch design review (Chapter 3)' });
     this.input.keyboard?.on('keydown-Z', (e: KeyboardEvent) => { if (e.ctrlKey || e.metaKey) this.doUndo(); });
     this.input.keyboard?.on('keydown-ENTER', () => this.goReview());
     gearButton(this);
@@ -179,7 +179,7 @@ export class HangarScene extends Phaser.Scene {
       this.meters.lander.set(Math.min(1, worst / 1.4), `${worst >= 1 ? '+' : ''}${((worst - 1) * 100).toFixed(0)}% Δv`, worst < 1 ? C.red : worst < 1.08 ? C.orange : C.green, 1 / 1.4);
     }
     this.summary.setText(`${this.review.blocking} BLOCKING\n${this.review.warnings} WARNINGS`).setTint(this.review.blocking ? C.red : this.review.warnings ? C.orange : C.green);
-    this.goBtn.setText(this.review.go ? 'REVIEW ▶' : 'REVIEW ▶');
+    this.goBtn.setText(SPEC_MODEL ? 'DESK ▶' : 'REVIEW ▶');
     this.undoBtn.setDisabled(this.undo.length === 0);
     // category status icons
     const culpritSlots: Record<string, 'fail' | 'warn'> = {};
@@ -366,7 +366,7 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
   goReview() {
     store.design = cloneDesign(this.design);
     store.saveDesign();
-    fadeTo(this, 'Review');
+    fadeTo(this, SPEC_MODEL ? 'Desk' : 'Review'); // spec: the Calculation Desk sits between the hangar and launch
   }
 }
 void W;

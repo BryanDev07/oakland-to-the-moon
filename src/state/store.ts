@@ -45,6 +45,10 @@ class Store {
   settings: Settings;
   seen: Record<string, boolean>;
   lastReport: MissionReport | null = null;
+  /** Calculation Desk progress per sheet (kept while that sheet's numbers are unchanged; not saved). */
+  desk: Record<string, { key: string; vals: (number | null)[] }> = {};
+  /** Points lost revealing desk answers on Hard (G: 10 each). */
+  deskPenalty = 0;
   previousReport: HistoryEntry | null = null;
 
   constructor() {

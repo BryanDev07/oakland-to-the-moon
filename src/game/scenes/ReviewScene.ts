@@ -103,6 +103,7 @@ export class ReviewScene extends Phaser.Scene {
     this.time.delayedCall(220 * calls.length + 700, () => {
       const seed = forcedSeed() ?? ((Date.now() % 1000000) | 0);
       store.mission = createMission(store.design, seed);
+      if (store.mission.em) store.mission.em.deskPenalty = store.deskPenalty; // Calculation Desk reveals
       store.saveMission();
       fadeTo(this, 'Launch');
     });

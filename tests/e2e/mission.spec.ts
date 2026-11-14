@@ -34,6 +34,11 @@ async function eva(p: Page, row: number, id: string) {
   expect((await surface(p))!.done[id]).toBe(before + 1);
   await p.waitForTimeout(1600); // the scene stays busy 1.3 s after each activity
 }
+/** The Calculation Desk sits between the hangar and the review: Enter moves on through every sheet and the board. */
+async function throughDesk(p: Page) {
+  await waitScene(p, 'Desk');
+  for (let i = 0; i < 20 && !(await hooks(p)).includes('Review'); i++) { await p.keyboard.press('Enter'); await p.waitForTimeout(350); }
+}
 /** True while an emergency window (or its mission-control result) is open. */
 const emergencyOpen = (p: Page) => p.evaluate(() => (window as unknown as { __ottm: { emergencyOpen: () => boolean } }).__ottm.emergencyOpen());
 /** Answer any open emergency with option 1 (A), then dismiss the mission-control result. */
@@ -123,6 +128,7 @@ test.describe('Oakland to the Moon', () => {
     await page.screenshot({ path: `${SHOTS}/04-hangar-baseline.png` });
     // baseline design is NO-GO; check the review blocks launch
     await page.keyboard.press('Enter');
+    await throughDesk(page);
     await waitScene(page, 'Review');
     await page.screenshot({ path: `${SHOTS}/05-design-review-nogo.png` });
     expect(await phase(page)).toBeNull();
@@ -139,6 +145,7 @@ test.describe('Oakland to the Moon', () => {
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${SHOTS}/06-hangar-science.png` });
     await page.keyboard.press('Enter');
+    await throughDesk(page);
     await waitScene(page, 'Review');
     await page.screenshot({ path: `${SHOTS}/07-design-review-go.png` });
     await page.keyboard.press('Enter'); // launch poll

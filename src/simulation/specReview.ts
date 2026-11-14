@@ -99,7 +99,7 @@ export function applySpecReview(d: Design, s: DesignStats, checks: ReviewCheck[]
   checks.push({
     id: 'shield', title: 'Heat shield', icon: 'safety', status: hs === 'burnthrough' ? 'fail' : hs === 'rough' ? 'warn' : 'pass',
     value: `${fmt(S.capsule.shieldMph)} mph = ${pct(S.shieldHealth)}`,
-    detail: `Coming home from the Moon hits the air at ${fmt(SHIELD_REQUIRED_MPH.v)}+ mph and up to 5,000°F. Health = rating ÷ ${fmt(SHIELD_REQUIRED_MPH.v)}.` +
+    detail: `Coming home from the Moon hits the air at ${fmt(SHIELD_REQUIRED_MPH.v)}+ mph and up to 5,000°F. Health = rating / ${fmt(SHIELD_REQUIRED_MPH.v)}.` +
       (hs === 'burnthrough' ? ' Under 90%: burn-through.' : hs === 'rough' ? ' 90-99%: rough ride (-10 crew safety).' : ''),
     fix: hs === 'safe' ? undefined : 'Pick a capsule whose heat shield is rated for lunar return.',
     culprits: hs === 'burnthrough' ? [capId] : [],
@@ -110,7 +110,7 @@ export function applySpecReview(d: Design, s: DesignStats, checks: ReviewCheck[]
   checks.push({
     id: 'data', title: 'Data sent home', icon: 'comms', status: dataOk ? 'pass' : 'warn',
     value: `${fmt(S.data.mbPerDay)} / ${fmt(S.data.needMbPerDay)} MB/day`,
-    detail: `MB per day = kbps × 86,400 × ${S.orbit.contactFraction.v} contact ÷ 8,000. The mission needs 300 MB/day plus each instrument's data.`,
+    detail: `MB per day = kbps × 86,400 × ${S.orbit.contactFraction.v} contact / 8,000. The mission needs 300 MB/day plus each instrument's data.`,
     fix: dataOk ? undefined : 'Cameras and radar make huge amounts of data: use Ka-band or laser comms.',
     culprits: dataOk ? [] : [d.slots.comms as string].filter(Boolean),
   });

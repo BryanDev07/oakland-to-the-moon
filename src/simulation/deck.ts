@@ -37,6 +37,7 @@ export interface EmergencyState {
   fdBonus: number; scienceAdj: number; scienceMult: number; safetyAdj: number; extraCostM: number;
   burnRisk: number; shieldDamage: number; scoreCap: number; landerLostH: number;
   freeFixUsed: boolean; abortReason: string | null;
+  deskPenalty?: number; // Calculation Desk reveals (Hard, G: 10 points each)
 }
 export function newEmergencyState(rocketSpare: number): EmergencyState {
   return { rocketSpare, fdBonus: 0, scienceAdj: 0, scienceMult: 1, safetyAdj: 0, extraCostM: 0, burnRisk: 0, shieldDamage: 0, scoreCap: 100, landerLostH: 0, freeFixUsed: false, abortReason: null };
