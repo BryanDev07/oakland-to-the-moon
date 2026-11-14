@@ -12,6 +12,7 @@ import { createMission } from '../../src/simulation/mission';
 import { scheduleEvents } from '../../src/simulation/events';
 import { Rng } from '../../src/simulation/rng';
 import * as K from '../../src/simulation/constants';
+import { budgetForM } from '../../src/simulation/specModel';
 import { kgToLb } from '../../src/simulation/units';
 import { flyMission } from './helpers';
 
@@ -20,6 +21,11 @@ const artemis = () => {
   const d = cloneDesign(REFERENCE_DESIGN);
   d.slots.lander = 'lander_hls'; d.plan.lv = 'goldenbear'; d.plan.crew = 4; delete d.slots.power;
   d.spec = { ...d.spec, architecture: 'artemis', orbit: 'NRHO', capsule: 'cap_orion' };
+  return d;
+};
+const premiumArtemis = () => {
+  const d = artemis(); d.slots.power = 'pwr_solar11'; d.slots.lifeSupport = 'ls_regen'; d.safety = ['saf_redund', 'saf_shelter'];
+  d.spec = { ...d.spec, difficulty: 'hard' };
   return d;
 };
 
@@ -68,11 +74,14 @@ describe('spec model: the physics lessons', () => {
       expect(status(d, 'lander_dv')).toBe('fail');
     }
   });
-  it('the Apollo-style reference flies from low lunar orbit, under the Hard budget', () => {
+  it('both mission styles can win on Hard ($4.2B): Apollo with a wide margin, Artemis only without premium extras', () => {
     const d = cloneDesign(REFERENCE_DESIGN); d.spec = { ...d.spec, difficulty: 'hard' };
     const r = reviewDesign(d);
     expect(r.go).toBe(true);
-    expect(r.stats.costM).toBeLessThan(2500);
+    expect(budgetForM(d) - r.stats.costM).toBeGreaterThan(0.4 * budgetForM(d));
+    const a = artemis(); a.spec = { ...a.spec, difficulty: 'hard' };
+    expect(reviewDesign(a).go).toBe(true);
+    expect(status(premiumArtemis(), 'budget')).toBe('fail');
   });
   it('the Budget LEO capsule fails re-entry from the Moon (72% shield)', () => {
     const d = cloneDesign(REFERENCE_DESIGN); d.spec = { ...d.spec, capsule: 'cap_budget' }; d.plan.crew = 3;
@@ -127,9 +136,9 @@ describe('spec model: material + fuel risks', () => {
 
 describe('PART C #26, #28-#30', () => {
   it('#26 at $0 or below the review locks launch', () => {
-    const d = cloneDesign(artemis()); d.spec = { ...d.spec, difficulty: 'hard' };
+    const d = premiumArtemis();
     const r = reviewDesign(d);
-    expect(r.stats.costM).toBeGreaterThan(2500);
+    expect(r.stats.costM).toBeGreaterThan(budgetForM(d));
     expect(status(d, 'budget')).toBe('fail');
     expect(r.go).toBe(false);
   });

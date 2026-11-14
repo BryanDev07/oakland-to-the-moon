@@ -23,8 +23,9 @@ describe('mass & budget', () => {
   });
   it('flags over-budget designs as blocking', () => {
     const d = cloneDesign(REFERENCE_DESIGN);
-    d.plan.lv = 'goldenbear'; d.slots.lander = 'lander_path'; d.slots.power = 'pwr_solar11'; d.slots.lifeSupport = 'ls_regen'; d.safety = ['saf_redund', 'saf_shelter'];
-    d.spec = { ...d.spec, difficulty: 'hard' }; // spec: Hard budget $2.5B
+    // Artemis-style (two Golden Bear launches) loaded with premium systems: over the Hard budget ($4.2B, G)
+    d.plan.lv = 'goldenbear'; d.slots.lander = 'lander_hls'; d.plan.crew = 4; d.slots.power = 'pwr_solar11'; d.slots.lifeSupport = 'ls_regen'; d.safety = ['saf_redund', 'saf_shelter'];
+    d.spec = { ...d.spec, difficulty: 'hard', architecture: 'artemis', orbit: 'NRHO', capsule: 'cap_orion' };
     const r = reviewDesign(d);
     expect(r.stats.costM).toBeGreaterThan(budgetForM(d));
     expect(status(d, 'budget')).toBe('fail');

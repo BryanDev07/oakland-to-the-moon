@@ -111,7 +111,7 @@ export const DOCKING: SmallPart[] = [
 // ---------------------------------------------------------------------------- thrusters and tanks (tab 3 §8)
 export interface ThrusterSpec { id: string; name: string; weightLb: Val | null; thrustN: [Val, Val]; veMs: [Val, Val]; priceUsd: Val }
 export const THRUSTERS: ThrusterSpec[] = [
-  { id: 'rcs_draco', name: 'Draco thruster (SpaceX)', weightLb: null, thrustN: [R(400), R(400)], veMs: [R(2940), R(2940)], priceUsd: G(1_000_000) },
+  { id: 'rcs_draco', name: 'Draco thruster (SpaceX)', weightLb: G(4.4, 'not published by SpaceX; game value (~2 kg)'), thrustN: [R(400), R(400)], veMs: [R(2940), R(2940)], priceUsd: G(1_000_000) },
   { id: 'rcs_mr107s', name: 'MR-107S hydrazine (L3Harris)', weightLb: R(2.23), thrustN: [R(100), R(360)], veMs: [R(2280), R(2320)], priceUsd: G(400_000) },
   { id: 'rcs_mr104g', name: 'MR-104G hydrazine (L3Harris)', weightLb: R(12), thrustN: [R(470), R(780)], veMs: [R(2180), R(2240)], priceUsd: G(800_000) },
 ];
@@ -203,7 +203,11 @@ export const BATTERY_MARGIN = G(1.2);
 export const LAUNCH_OPS_USD = G(5_000_000, 'per launch');
 export const SUPPLIES_USD_PER_CREW_DAY = G(20_000);
 export const SHIELD_ROUGH_RIDE_SAFETY = G(-10, 'health 90-99%');
-export const BUDGETS_USD = { easy: G(5_000_000_000), medium: G(3_500_000_000), hard: G(2_500_000_000) };
+export const BUDGETS_USD = {
+  easy: G(5_000_000_000),
+  medium: G(3_500_000_000), // unused: the game has Easy and Hard only
+  hard: G(4_200_000_000, "spec said $2.5B; raised by Joseph so both Apollo-style and Artemis-style can win on Hard"),
+};
 
 // ---------------------------------------------------------------------------- the player's spec build
 export interface StageBuild { engine: string; count: number; fuelLb: number; material: MaterialId }
