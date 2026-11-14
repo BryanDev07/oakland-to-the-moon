@@ -7,6 +7,7 @@ import { abortLanding, agl, autopilot, createLanding, inSafeZone, LandingSim, ma
 import { MOON_G } from '../../simulation/constants';
 import { massFlow } from '../../simulation/rocket';
 import { SITE_BY_ID } from '../../data/mission';
+import { showEmergency } from '../ui/emergency';
 
 const PX = 3; // pixels per metre
 const BASE = 1750; // screen y of terrain height 0
@@ -39,6 +40,11 @@ export class LandingScene extends Phaser.Scene {
     const s = store.mission;
     if (!s || s.phase !== 'DESCENT') { fadeTo(this, s ? 'Ops' : 'Title'); return; }
     this.started = false; this.finished = false; this.auto = false; this.acc = 0; this.cmd = { throttle: 0.4, tilt: 0 };
+    // emergency deck: landing cards play before the approach (restart to pick up any fuel change)
+    if (Sim.triggerStage(s, 'landing')) {
+      showEmergency(this, s, () => { store.saveMission(); if (s.phase === 'DESCENT') this.scene.restart(); else fadeTo(this, s.crewLost || s.phase === 'COMPLETE' ? 'Report' : 'Ops'); });
+      return;
+    }
     audio.music('tension');
     const ap = Sim.approachState(s);
     this.terrain = makeTerrain(s.seed, ap.hazard);

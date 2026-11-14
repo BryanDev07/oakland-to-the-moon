@@ -47,7 +47,7 @@ export interface AvailableActivity { a: Activity; ok: boolean; reason: string }
 
 export function surfaceStatus(s: MissionState) {
   const tempo = TEMPO_BY_ID[s.design.plan.tempo];
-  const stayH = Math.min(s.design.plan.stayDays * 24, s.stats.lander.stayCapacityH);
+  const stayH = Math.min(s.design.plan.stayDays * 24, s.stats.lander.stayCapacityH - (s.em?.landerLostH ?? 0)); // card 5: borrowed lander supplies
   const evaLeftToday = tempo.evaHoursPerDay - s.surface.evaUsedToday;
   const daysLeft = s.design.plan.stayDays - s.surface.day;
   const asc = ascentCheck(s);
@@ -103,6 +103,7 @@ export function restUntilNextDay(s: MissionState): { ok: boolean; message: strin
   const st = surfaceStatus(s);
   if (st.daysLeft <= 0) return { ok: false, message: 'Planned stay complete: time to lift off.' };
   const restH = 24 - s.surface.evaUsedToday;
+  if (s.surface.hoursOnSurface + restH > st.stayH + 1e-6) return { ok: false, message: 'The lander cannot support another night: time to lift off.' };
   s.landerBatteryWh = Math.max(0, s.landerBatteryWh - s.stats.lander.landerLoadW * restH);
   s.surface.hoursOnSurface += restH;
   s.surface.day += 1;

@@ -1,5 +1,6 @@
 import type { Design } from '../data/mission';
 import type { DesignStats } from './spacecraft';
+import type { EmergencyState } from './deck';
 
 export type Phase =
   | 'TRANSIT_OUT' | 'LOI_PENDING' | 'LUNAR_ORBIT' | 'DESCENT' | 'SURFACE' | 'LUNAR_ORBIT_POST'
@@ -16,7 +17,9 @@ export interface PendingEvent {
   title: string;
   text: string;
   learn: string;
-  options: { label: string; detail: string }[];
+  options: { label: string; detail: string; good?: string; bad?: string }[];
+  // emergency deck (JOSEPH_SPEC tab 7)
+  stage?: string; real?: string; scenario?: boolean; hint?: string; fdPick?: number;
 }
 
 export interface MissionState {
@@ -63,11 +66,12 @@ export interface MissionState {
   acquiredMB: Record<DataSource, number>;
   lostMB: number;
   // events
-  schedule: { id: string; at: number; phases: Phase[] }[];
+  schedule: { id: string; at: number; phases: Phase[]; stage?: string }[];
   pending: PendingEvent | null;
   timed: TimedEffect[];
   eventsSeen: string[];
-  decisions: { event: string; choice: string; t: number }[];
+  decisions: { event: string; choice: string; t: number; fd?: boolean; good?: string; bad?: string; result?: string }[];
+  em?: EmergencyState; // emergency-deck bookkeeping (spec model)
   entryDispersion: number; // multiplies entry heat load
   // landing & surface
   landing: { attempted: boolean; outcome: 'none' | 'soft' | 'hard' | 'abort' | 'crash'; vImpact: number; propLeftKg: number; damaged: string | null };

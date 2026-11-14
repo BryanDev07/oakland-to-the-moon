@@ -9,6 +9,7 @@ import { SITE_BY_ID } from '../../data/mission';
 import { FREE_RETURN_S, HOUR, TRANSIT_BACK_S, TRANSIT_OUT_S } from '../../simulation/constants';
 import type { MissionState } from '../../simulation/types';
 import { missionDv } from '../../simulation/specModel';
+import { showEmergency } from '../ui/emergency';
 
 const SPEEDS = [0, 12, 48, 192]; // sim steps (5 min each) per real second
 const PHASE_LABEL: Record<string, string> = {
@@ -261,19 +262,14 @@ export class OpsScene extends Phaser.Scene {
     const s = this.s;
     const ev = s.pending!;
     this.modalOpen = true;
-    audio.sfx('alarm');
-    if (store.settings.screenShake) this.cameras.main.shake(300, 0.004);
-    modal(this, {
-      title: ev.title, text: ev.text, learn: ev.learn, alert: true,
-      options: ev.options,
-      onChoose: (i) => {
-        const msg = Sim.resolveEvent(s, i);
-        this.modalOpen = false;
-        this.refreshControls();
-        store.saveMission();
-        toast(this, 'Mission Control', msg, 'portrait_director', 5000);
-        if (s.crewLost) this.onPhase();
-      },
+    const legacy = ev.fdPick === undefined;
+    showEmergency(this, s, () => {
+      this.modalOpen = false;
+      this.refreshControls();
+      store.saveMission();
+      const last = s.decisions[s.decisions.length - 1];
+      if (legacy && last?.result) toast(this, 'Mission Control', last.result, 'portrait_director', 5000);
+      this.onPhase();
     });
   }
 

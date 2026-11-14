@@ -30,7 +30,8 @@ describe('science: scored out of 50', () => {
     expect(SCIENCE_FULL_POINTS).toBe(50);
   });
   it('full success needs 50+ points: a mission home with fewer is only partial', () => {
-    const s = flyMission(createMission(withScience(['sci_retro']), 21));
+    const m = createMission(withScience(['sci_retro']), 21); m.schedule = []; // about the 50-point bar, not emergencies
+    const s = flyMission(m);
     expect(s.crewLost).toBe(false);
     const rep = evaluate(s);
     expect(rep.sciencePoints).toBeLessThan(50);

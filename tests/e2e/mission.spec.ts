@@ -27,11 +27,25 @@ async function eva(p: Page, row: number, id: string) {
   // Clicks are ignored while the scene is busy (dialogue, walking), so click again until it registers.
   while (((await surface(p))!.done[id] ?? 0) === before) {
     if (Date.now() > end) throw new Error(`EVA activity ${id} (row ${row}) never started`);
+    await clearEmergencies(p);
     await click(p, 404, 17 + row * 23 + 11);
     await p.waitForTimeout(1500);
   }
   expect((await surface(p))!.done[id]).toBe(before + 1);
   await p.waitForTimeout(1600); // the scene stays busy 1.3 s after each activity
+}
+/** True while an emergency window (or its mission-control result) is open. */
+const emergencyOpen = (p: Page) => p.evaluate(() => (window as unknown as { __ottm: { emergencyOpen: () => boolean } }).__ottm.emergencyOpen());
+/** Answer any open emergency with option 1 (A), then dismiss the mission-control result. */
+async function clearEmergencies(p: Page, timeout = 15000) {
+  const end = Date.now() + timeout;
+  while (await emergencyOpen(p)) { if (Date.now() > end) throw new Error('emergency window never closed'); await p.keyboard.press('1'); await p.waitForTimeout(400); }
+}
+/** Wait for a scene, answering emergencies that open on the way. */
+async function waitSceneClearing(p: Page, key: string, timeout = 30000) {
+  const end = Date.now() + timeout;
+  while (!(await hooks(p)).includes(key)) { if (Date.now() > end) throw new Error(`timeout waiting for scene ${key}`); if (await emergencyOpen(p)) await p.keyboard.press('1'); await p.waitForTimeout(250); }
+  await p.waitForTimeout(500);
 }
 /**
  * Click a mission button until the phase changes. A seeded emergency can open right as the button
@@ -42,7 +56,7 @@ async function clickUntilPhase(p: Page, gx: number, gy: number, want: string, ti
   while (Date.now() < end) {
     if ((await phase(p)) === want) return;
     const pending = await p.evaluate(() => !!(window as unknown as { __ottm: Hooks }).__ottm.store.mission?.pending);
-    if (pending) await p.keyboard.press('1'); else await click(p, gx, gy);
+    if (pending || (await emergencyOpen(p))) await p.keyboard.press('1'); else await click(p, gx, gy);
     await p.waitForTimeout(1200);
   }
   throw new Error(`timeout waiting for phase ${want}`);
@@ -53,7 +67,7 @@ async function until(p: Page, cond: () => Promise<boolean>, timeout = 60000) {
   while (Date.now() < end) {
     if (await cond()) return;
     const pending = await p.evaluate(() => !!(window as unknown as { __ottm: Hooks }).__ottm.store.mission?.pending);
-    if (pending) { await p.keyboard.press('1'); }
+    if (pending || (await emergencyOpen(p))) { await p.keyboard.press('1'); }
     await p.waitForTimeout(250);
   }
   throw new Error('timeout waiting for condition');
@@ -120,6 +134,8 @@ test.describe('Oakland to the Moon', () => {
     await page.keyboard.press('2');
     await page.waitForTimeout(500);
     await click(page, 54, 19 + 13 * 13.6 + 6); // Science category
+    // Reproducible emergencies: seed 221 draws card 2 (launch), 5 (coast) and 11 (lunar orbit) on Easy
+    await page.evaluate(() => (window as unknown as { __ottm: { debug: { forceSeed(n: number): void } } }).__ottm.debug.forceSeed(221));
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${SHOTS}/06-hangar-science.png` });
     await page.keyboard.press('Enter');
@@ -130,11 +146,13 @@ test.describe('Oakland to the Moon', () => {
     await waitScene(page, 'Launch', 15000);
     await page.waitForTimeout(12500);
     await page.screenshot({ path: `${SHOTS}/08-launch.png` });
+    await clearEmergencies(page);
     await click(page, 432, 13); // skip to TLI vignette
+    await clearEmergencies(page);
     await page.waitForTimeout(1200);
     await page.screenshot({ path: `${SHOTS}/09-tli.png` });
     // Chapter 4: journey
-    await waitScene(page, 'Ops', 15000);
+    await waitSceneClearing(page, 'Ops', 30000);
     await page.waitForTimeout(2600);
     await page.screenshot({ path: `${SHOTS}/10-ops-transit.png` });
     await click(page, 272 + 3 * 26 + 12, 179); // 16x speed
@@ -145,12 +163,20 @@ test.describe('Oakland to the Moon', () => {
     await click(page, 272 + 2 * 26 + 12, 179); // 4x
     await page.waitForTimeout(3000);
     await page.screenshot({ path: `${SHOTS}/11-ops-lunar-orbit.png` });
-    await until(page, async () => !(await page.evaluate(() => !!(window as unknown as { __ottm: Hooks }).__ottm.store.mission?.pending)), 10000);
-    await click(page, 246 + 75, 229); // BEGIN DESCENT
-    await page.waitForTimeout(400);
-    await page.keyboard.press('1');
+    // BEGIN DESCENT, then confirm with '1'. An emergency (or its result window) may be open: answer it first.
+    for (let tries = 0; (await phase(page)) !== 'DESCENT'; tries++) {
+      if (tries > 15) throw new Error('could not begin the descent');
+      await until(page, async () => !(await page.evaluate(() => !!(window as unknown as { __ottm: Hooks }).__ottm.store.mission?.pending)), 10000);
+      await clearEmergencies(page);
+      await click(page, 246 + 75, 229); // BEGIN DESCENT
+      await page.waitForTimeout(400);
+      if (await emergencyOpen(page)) continue; // a card opened instead of the descent dialog
+      await page.keyboard.press('1');
+      await page.waitForTimeout(800);
+    }
     // Chapter 5: landing
-    await waitScene(page, 'Landing', 15000);
+    await waitSceneClearing(page, 'Landing', 15000);
+    await clearEmergencies(page);
     await page.keyboard.press('2'); // autopilot
     await page.waitForTimeout(4000);
     await page.screenshot({ path: `${SHOTS}/12-landing.png` });
@@ -198,6 +224,7 @@ test.describe('Oakland to the Moon', () => {
     expect(hist.length).toBeGreaterThan(0);
     expect(hist[0].score).toBeGreaterThan(0);
     expect(hist[0].outcome).toBe('FULL MISSION SUCCESS');
+    expect(hist[0].seed).toBe(221);
     console.log('final', hist[0]);
     expect(errors).toEqual([]);
   });

@@ -27,7 +27,9 @@ export interface MissionReport {
   science: ScienceLine[];
   sciencePoints: number;
   resources: { label: string; value: string }[];
-  decisions: { event: string; choice: string }[];
+  decisions: { event: string; choice: string; fd: boolean; good?: string; bad?: string; result?: string }[];
+  fdBonus: number; // Flight Director bonus (+50 per matching pick on Hard, G)
+  missionPoints: number; // overall x 10 + Flight Director bonus (G)
   failures: string[];
   recommendations: string[];
   lessons: string[];
@@ -67,16 +69,20 @@ export function evaluate(s: MissionState): MissionReport {
   const landed = s.landing.outcome === 'soft' || s.landing.outcome === 'hard';
   const returned = !s.crewLost && s.phase === 'COMPLETE';
   const sci = scienceBreakdown(s);
+  // emergency-deck effects on science (spec tab 7: science points and % science lost)
+  const E = s.em;
+  if (E && E.scienceMult !== 1) { const base = sci.reduce((a, l) => a + l.points, 0); sci.push({ id: 'em_mult', label: `Emergency decisions (${Math.round((E.scienceMult - 1) * 100)}% science)`, points: base * (E.scienceMult - 1), detail: '' }); }
+  if (E && E.scienceAdj) sci.push({ id: 'em_adj', label: 'Emergency decisions (science points)', points: E.scienceAdj, detail: '' });
   const roleSci = SPEC_MODEL ? scienceMult(s.design.spec?.role) : 1; // Science & Comms Lead: +20%
   if (roleSci !== 1) {
     const base = sci.reduce((a, l) => a + l.points, 0);
     sci.push({ id: 'role', label: 'Science & Comms Lead bonus (+20%)', points: base * (roleSci - 1), detail: '' });
   }
-  const sciencePoints = sci.reduce((a, l) => a + l.points, 0);
+  const sciencePoints = Math.max(0, sci.reduce((a, l) => a + l.points, 0));
   const scienceScore = clamp01(sciencePoints / SCIENCE_FULL_POINTS) * (s.crewLost ? 0.3 : 1);
 
   const roughRide = s.flags.entryHealth != null && s.flags.entryHealth < 0.9999 && s.flags.entryHealth >= 0.9; // spec tab 6 #14
-  const crewScore = returned ? clamp01(clamp01(s.condition / 100) * 0.7 + 0.3 + (roughRide ? SHIELD_ROUGH_RIDE_SAFETY.v / 100 : 0)) : 0;
+  const crewScore = returned ? clamp01(clamp01(s.condition / 100) * 0.7 + 0.3 + (roughRide ? SHIELD_ROUGH_RIDE_SAFETY.v / 100 : 0) + (E?.safetyAdj ?? 0) / 100) : 0; // + emergency safety score
 
   const cap = s.stats.mass.smPropKg || 1;
   const propSub = clamp01(s.propKg / (0.04 * cap));
@@ -92,7 +98,7 @@ export function evaluate(s: MissionState): MissionReport {
   const resources = returned ? (leftover < 0.05 ? 0.3 : leftover <= 0.4 ? 1 : clamp01(1 - (leftover - 0.4) * 1.2)) : 0;
 
   const budgetM = budgetForM(s.design);
-  const reserve = Math.round(budgetM - s.stats.costM);
+  const reserve = Math.round(budgetM - s.stats.costM - (E?.extraCostM ?? 0)); // emergencies can cost money
   const budget = clamp01(0.4 + 0.6 * clamp01(reserve / (0.12 * budgetM)));
 
   const parts = [
@@ -106,10 +112,12 @@ export function evaluate(s: MissionState): MissionReport {
 
   let outcome: Outcome;
   if (s.crewLost) outcome = 'MISSION_LOST';
+  else if (E?.abortReason) outcome = 'ABORT_SAFE';
   else if (returned && landed && scienceScore >= (SPEC_MODEL ? 1 : 0.6)) outcome = 'FULL_SUCCESS'; // spec: 50+ points
   else if (returned && (landed || scienceScore >= 0.3)) outcome = 'PARTIAL_SUCCESS';
   else outcome = 'ABORT_SAFE';
   if (outcome !== 'FULL_SUCCESS') overall = Math.min(overall, 79);
+  if (E) overall = Math.min(overall, E.scoreCap); // e.g. launch abort: capped at 20%
   if (outcome === 'MISSION_LOST') overall = Math.min(overall, 30);
   const outcomeLabel = { FULL_SUCCESS: 'FULL MISSION SUCCESS', PARTIAL_SUCCESS: 'PARTIAL SUCCESS', ABORT_SAFE: 'MISSION ABORTED - CREW SAFE', MISSION_LOST: 'MISSION LOST' }[outcome];
 
@@ -118,6 +126,7 @@ export function evaluate(s: MissionState): MissionReport {
   const recs: string[] = [];
   const lessons: string[] = [];
   if (s.lossCause) failures.push(s.lossCause);
+  if (E?.abortReason) failures.push(E.abortReason);
   if (s.flags.stranded) recs.push('Carry more propellant margin (bigger tanks or the higher-Isp methalox engine) so an anomaly cannot strand the crew.');
   if (s.flags.tliTrimDv > 0) failures.push(`Launch vehicle underperformed by ${s.flags.tliTrimDv} m/s; the service module made up the difference.`);
   if (s.flags.brownoutH > 0) { failures.push(`Battery ran flat for ${s.flags.brownoutH.toFixed(1)} h.`); recs.push('Bigger solar wings or battery, or shed loads earlier (conserve mode, instruments off).'); lessons.push('Energy balance: when load exceeds generation, the battery drains at (P_load − P_gen) watts.'); }
@@ -148,7 +157,9 @@ export function evaluate(s: MissionState): MissionReport {
       { label: 'Data secured', value: `${((securedMB(s, 'map') + securedMB(s, 'neutron') + securedMB(s, 'pancam') + securedMB(s, 'seismo')) / 1000).toFixed(0)} GB` },
       { label: 'Samples', value: `${Math.round(s.samplesAboardKg)} kg` },
     ],
-    decisions: s.decisions.map((d) => ({ event: d.event, choice: d.choice })),
+    decisions: s.decisions.map((d) => ({ event: d.event, choice: d.choice, fd: !!d.fd, good: d.good, bad: d.bad, result: d.result })),
+    fdBonus: E?.fdBonus ?? 0,
+    missionPoints: Math.round(overall) * 10 + (E?.fdBonus ?? 0),
     failures, recommendations: recs, lessons,
     date: new Date().toISOString(),
     seed: s.seed,

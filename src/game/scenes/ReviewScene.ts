@@ -8,6 +8,7 @@ import { LV_BY_ID, SITE_BY_ID, TEMPO_BY_ID } from '../../data/mission';
 import { SPEC_MODEL } from '../../simulation/constants';
 import { fmtLb, fmtUsdM } from '../../simulation/units';
 import { createMission } from '../../simulation/mission';
+import { forcedSeed } from '../../state/debug';
 
 export class ReviewScene extends Phaser.Scene {
   r!: ReviewResult;
@@ -97,7 +98,7 @@ export class ReviewScene extends Phaser.Scene {
       });
     });
     this.time.delayedCall(220 * calls.length + 700, () => {
-      const seed = (Date.now() % 1000000) | 0;
+      const seed = forcedSeed() ?? ((Date.now() % 1000000) | 0);
       store.mission = createMission(store.design, seed);
       store.saveMission();
       fadeTo(this, 'Launch');

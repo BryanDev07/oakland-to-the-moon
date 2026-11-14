@@ -3,6 +3,7 @@ import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, crt, Dialogue, fadeIn, fadeTo, gearButton, H, iconFrame, Meter, modal, panel, toast, txt, W } from '../ui/ui';
 import * as Sim from '../../simulation/mission';
+import { showEmergency } from '../ui/emergency';
 import { availableActivities, doActivity, restUntilNextDay, surfaceStatus } from '../../simulation/surface';
 import type { MissionState } from '../../simulation/types';
 
@@ -63,10 +64,18 @@ export class SurfaceScene extends Phaser.Scene {
         this.dlg.play([
           { who: 'Commander Kai', text: 'Hello, Oakland! Boots on the Moon. This one is for the Town, and for every kid who ever asked how far away it is.', portrait: 'portrait_kai_suit' },
           { who: 'CAPCOM Sam', text: 'We copy, Commander! The whole rec center is cheering. You have a busy EVA plan: spend your hours wisely, and remember the ascent stage has to lift every sample.', portrait: 'portrait_capcom' },
-        ], () => { this.busy = false; this.kai.play('kai_eva-idle'); });
+        ], () => { this.busy = false; this.kai.play('kai_eva-idle'); this.checkEmergency(); });
       } });
     }
     this.input.once('pointerdown', () => audio.unlock());
+  }
+
+  /** Emergency deck: surface cards play once the crew is outside. */
+  checkEmergency() {
+    const s = this.s;
+    if (!Sim.triggerStage(s, 'surface')) return;
+    this.busy = true;
+    showEmergency(this, s, () => { this.busy = false; this.refresh(); if (s.crewLost || s.phase === 'COMPLETE') fadeTo(this, 'Report'); else this.checkEmergency(); });
   }
 
   deploy(id: string, anim = true) {

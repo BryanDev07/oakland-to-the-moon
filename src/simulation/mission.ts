@@ -6,6 +6,7 @@ import { COMPONENT_BY_ID } from '../data/components';
 import { cloneDesign, Design, LV_BY_ID, SITE_BY_ID, TEMPO_BY_ID } from '../data/mission';
 import * as K from './constants';
 import { EVENT_BY_ID, scheduleEvents } from './events';
+import { buildCard, DECK_BY_ID, em, FD_BONUS, newEmergencyState, resolveCard, scheduleDeck, Stage } from './deck';
 import { Rng } from './rng';
 import { deltaV, propellantForDv } from './rocket';
 import { analyzeDesign } from './spacecraft';
@@ -51,7 +52,9 @@ export function createMission(design: Design, seed: number): MissionState {
     flags: { brownoutH: 0, thermalH: 0, minBatteryFrac: 1, minPropMarginKg: Infinity, tliTrimDv: 0, stranded: false, entryOk: null, entryHealth: null },
     crewLost: false, lossCause: null, log: [],
   };
-  s.schedule = scheduleEvents(s, rng);
+  // Spec model: the 16-card A/B/C deck (deck.ts). Legacy events stay in events.ts for the old model.
+  s.em = newEmergencyState(stats.spec?.rocket.spare ?? 0);
+  s.schedule = K.SPEC_MODEL ? scheduleDeck(s, rng) : scheduleEvents(s, rng);
   // Launch vehicle performance: chance of an upper-stage shortfall scales with LV unreliability.
   // Reliability rolls are OFF in the spec model (RELIABILITY_ROLLS): risk comes only from emergencies.
   const lv = LV_BY_ID[d.plan.lv];
@@ -303,9 +306,10 @@ export function step(s: MissionState, dt = K.SIM_DT, allowEvents = true) {
   if (allowEvents && !s.pending) {
     const due = s.schedule.find((e) => e.phases.includes(s.phase) && phaseTime(s) >= e.at && !s.eventsSeen.includes(e.id));
     if (due) {
-      const def = EVENT_BY_ID[due.id];
       s.eventsSeen.push(due.id);
-      if (def.eligible(s)) { s.pending = def.build(s); log(s, `ALERT: ${s.pending.title}`, 'event'); }
+      const card = DECK_BY_ID[due.id];
+      if (card) { s.pending = buildCard(card, s, (due.stage ?? 'coast') as Stage); log(s, `ALERT: ${s.pending.title}`, 'event'); }
+      else { const def = EVENT_BY_ID[due.id]; if (def.eligible(s)) { s.pending = def.build(s); log(s, `ALERT: ${s.pending.title}`, 'event'); } }
     }
   }
 }
@@ -321,21 +325,68 @@ export function advance(s: MissionState, seconds: number, allowEvents = true) {
   }
 }
 
-export function resolveEvent(s: MissionState, option: number): string {
+export function resolveEvent(s: MissionState, option: number, freeFix = false): string {
   if (!s.pending) return '';
-  const def = EVENT_BY_ID[s.pending.id];
+  const ev = s.pending;
   const rng = new Rng(s.rngState ^ Math.floor(s.t));
-  const label = s.pending.options[option]?.label ?? '';
-  const msg = def.resolve(s, option, rng);
+  const label = ev.options[option]?.label ?? '';
+  const card = DECK_BY_ID[ev.id];
+  const fd = card ? ev.fdPick === option : false;
+  let msg = card ? resolveCard(card, s, option, rng, freeFix) : EVENT_BY_ID[ev.id].resolve(s, option, rng);
+  // Flight Director bonus (Hard only): the pick matched the safest sound call for the player's numbers
+  if (fd && specOf(s.design).difficulty === 'hard') { em(s).fdBonus += FD_BONUS; msg += ` ★ Flight Director bonus +${FD_BONUS}.`; }
   s.rngState = rng.state;
-  s.decisions.push({ event: s.pending.title, choice: label, t: s.t });
-  log(s, `${s.pending.title}: ${label}. ${msg}`, 'decision');
+  s.decisions.push({ event: ev.title, choice: label, t: s.t, fd, good: ev.options[option]?.good, bad: ev.options[option]?.bad, result: msg });
+  log(s, `${ev.title}: ${label}. ${msg}`, 'decision');
   s.pending = null;
   if (s.condition <= 0) loseCrew(s, 'Crew health failed after the emergency.');
   return msg;
 }
 
-function loseCrew(s: MissionState, cause: string) {
+/** Fire the next scheduled card for a scene-driven stage (pad, launch, Earth orbit, landing, surface). */
+export function triggerStage(s: MissionState, stage: Stage): boolean {
+  if (s.pending || s.crewLost) return false;
+  const due = s.schedule.find((e) => e.stage === stage && !s.eventsSeen.includes(e.id));
+  if (!due) return false;
+  s.eventsSeen.push(due.id);
+  s.pending = buildCard(DECK_BY_ID[due.id], s, stage);
+  log(s, `ALERT: ${s.pending.title}`, 'event');
+  return true;
+}
+
+/** End the mission with the crew safe (launch abort, Earth-orbit mission, Easy-mode failure). */
+export function abortMission(s: MissionState, reason: string) {
+  em(s).abortReason = reason;
+  s.crewOnCsm = s.stats.crew;
+  s.flags.entryOk = true;
+  log(s, `ABORT: ${reason}`, 'warn');
+  setPhase(s, 'COMPLETE');
+}
+
+/** Apollo 13-style lifeboat: the lander's batteries join in and the crew loops the Moon home. */
+export function lifeboatReturn(s: MissionState) {
+  if (s.landerAttached) { s.batteryCapWh += s.landerBatteryWh; s.batteryWh += s.landerBatteryWh; }
+  setPhase(s, 'FREE_RETURN');
+  log(s, 'Lifeboat: the crew moved into the lander and is looping the Moon toward home.', 'warn');
+}
+
+/** Head home from wherever the ship is. `savedDays` shortens a free-return coast. */
+export function turnBack(s: MissionState, savedDays: number) {
+  if (s.phase === 'TRANSIT_OUT' || s.phase === 'LOI_PENDING') { setPhase(s, 'FREE_RETURN'); s.phaseStart -= savedDays * K.DAY; log(s, 'Turning back: free-return trajectory home.', 'warn'); }
+  else if (s.phase === 'LUNAR_ORBIT' || s.phase === 'LUNAR_ORBIT_POST') { s.landerAttached = false; s.crewOnCsm = s.stats.crew; executeTEI(s); }
+}
+
+/** A tired or less-trained crew may fumble the next big burn (deck risk, G: 50 m/s). */
+function burnMistake(s: MissionState) {
+  const e = s.em;
+  if (!e || e.burnRisk <= 0) return;
+  const rng = new Rng(s.rngState ^ 0xb3a7);
+  const hit = rng.chance(Math.min(1, e.burnRisk));
+  s.rngState = rng.state; e.burnRisk = 0;
+  if (hit) { const p = Math.min(s.propKg, propellantForDv(totalMass(s), 50, isp(s))); s.propKg -= p; log(s, `A crew mistake during the burn cost 50 m/s (${fmt(p / 0.45359237)} lb of propellant).`, 'warn'); }
+}
+
+export function loseCrew(s: MissionState, cause: string) {
   s.crewLost = true;
   s.lossCause = cause;
   log(s, `MISSION LOST: ${cause}`, 'bad');
@@ -376,6 +427,7 @@ export function executeLOI(s: MissionState) {
   // outbound corrections are folded in at arrival
   const tcm = burn(s, 'Trajectory corrections', dv.tcmOut);
   if (!tcm.ok) return tcm;
+  burnMistake(s);
   const r = burn(s, 'Lunar orbit insertion', dv.loi);
   const halo = K.SPEC_MODEL && specOf(s.design).orbit === 'NRHO';
   if (r.ok && halo && specOf(s.design).architecture === 'artemis' && s.landerAttached) dock(s, 'Docked with the waiting lander');
@@ -473,6 +525,7 @@ export function executeTEI(s: MissionState) {
   const aborting = s.phase === 'LUNAR_ORBIT';
   if (aborting && s.landerAttached) { s.landerAttached = false; log(s, 'Lander jettisoned unused to save propellant.', 'warn'); }
   const dv = missionDv(s.design);
+  burnMistake(s);
   const r = burn(s, 'Trans-Earth injection', dv.tei);
   if (!r.ok) {
     s.flags.stranded = true;
@@ -492,7 +545,7 @@ export function performEntry(s: MissionState) {
   if (K.SPEC_MODEL && s.stats.spec) {
     // health = rating ÷ 24,400 mph (max 100%) − damage; earlier anomalies count as damage (G)
     const mph = s.stats.spec.capsule.shieldMph;
-    const health = shieldHealth(mph, Math.max(0, s.entryDispersion - 1));
+    const health = shieldHealth(mph, Math.max(0, s.entryDispersion - 1) + (s.em?.shieldDamage ?? 0)); // + emergency damage (card 14)
     const res = shieldResult(health);
     s.flags.entryHealth = health;
     s.flags.entryOk = res !== 'burnthrough';

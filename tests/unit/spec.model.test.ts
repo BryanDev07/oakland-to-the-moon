@@ -162,7 +162,11 @@ describe('PART C #26, #28-#30', () => {
     expect(status(d, 'budget')).toBe('fail');
     expect(r.go).toBe(false);
   });
-  it.todo('#28 emergency count: Easy draws 3, Hard draws 5 (Phase 4: 16-card deck)');
+  it('#28 emergency count: Easy draws 3, Hard draws 5 (more cases in spec.deck.test.ts)', () => {
+    const d = (difficulty: 'easy' | 'hard') => { const x = cloneDesign(REFERENCE_DESIGN); x.spec = { ...x.spec, difficulty }; return x; };
+    expect(createMission(d('easy'), 77).schedule.length).toBe(3);
+    expect(createMission(d('hard'), 77).schedule.length).toBe(5);
+  });
   it('#29 same design + same seed gives the same emergencies in the same order', () => {
     const a = createMission(REFERENCE_DESIGN, 777), b = createMission(REFERENCE_DESIGN, 777);
     expect(a.schedule).toEqual(b.schedule);

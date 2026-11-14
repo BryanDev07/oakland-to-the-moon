@@ -16,6 +16,7 @@ import { RoleSelectScene } from './game/scenes/RoleSelectScene';
 import { store } from './state/store';
 import { audio } from './game/audio/audio';
 import * as debug from './state/debug';
+import { emergencyUI } from './game/ui/emergency';
 
 const scenes: Phaser.Types.Scenes.SceneType[] = [BootScene, TitleScene, IntroScene, BriefingScene, RoleSelectScene, HangarScene, ReviewScene, LaunchScene, OpsScene, LandingScene, SurfaceScene, ReturnScene, ReportScene, OverlayScene];
 
@@ -40,6 +41,7 @@ window.__ottm = {
   store,
   audio,
   debug,
+  emergencyOpen: () => emergencyUI.open,
   scene: () => game.scene.getScenes(true).map((s) => s.scene.key),
   goto: (key: string, data?: object) => {
     for (const s of game.scene.getScenes(true)) if (s.scene.key !== key) game.scene.stop(s.scene.key);

@@ -208,7 +208,7 @@ export class Dialogue extends Phaser.GameObjects.Container {
 }
 
 // ----------------------------------------------------------------- Modal (choices)
-export function modal(scene: Phaser.Scene, opts: { title: string; text: string; learn?: string; options: { label: string; detail?: string }[]; alert?: boolean; onChoose: (i: number) => void; width?: number }) {
+export function modal(scene: Phaser.Scene, opts: { title: string; text: string; learn?: string; options: { label: string; detail?: string; good?: string; bad?: string }[]; alert?: boolean; onChoose: (i: number) => void; width?: number }) {
   const c = scene.add.container(0, 0).setDepth(900);
   const shade = scene.add.rectangle(0, 0, W, H, 0x04030c, 0.72).setOrigin(0, 0).setInteractive();
   c.add(shade);
@@ -216,7 +216,13 @@ export function modal(scene: Phaser.Scene, opts: { title: string; text: string; 
   const x = Math.round((W - w) / 2);
   const body = txt(scene, x + 12, 0, opts.text, { maxWidth: w - 24, color: C.white });
   const learn = opts.learn ? txt(scene, x + 26, 0, opts.learn, { maxWidth: w - 40, color: C.teal }) : null;
-  const optH = opts.options.map((o) => (o.detail ? 28 : 20));
+  // option sub-lines: detail (blue), Good (green), Bad (red); heights measured so nothing overlaps
+  const subs = opts.options.map((o) => [
+    ...(o.detail ? [txt(scene, 0, 0, o.detail, { color: C.blue, maxWidth: w - 44 })] : []),
+    ...(o.good ? [txt(scene, 0, 0, `Good: ${o.good}`, { color: C.green, maxWidth: w - 44 })] : []),
+    ...(o.bad ? [txt(scene, 0, 0, `Bad: ${o.bad}`, { color: C.red, maxWidth: w - 44 })] : []),
+  ]);
+  const optH = subs.map((ps) => (ps.length ? 16 + ps.reduce((a, t) => a + t.height, 0) + 3 : 20));
   const h = 22 + body.height + 8 + (learn ? learn.height + 10 : 0) + optH.reduce((a, b) => a + b, 0) + 8;
   const y = Math.round(Math.max(4, (H - h) / 2));
   const p = panel(scene, x, y, w, h, opts.alert ? 'panel_alert' : 'panel');
@@ -231,7 +237,9 @@ export function modal(scene: Phaser.Scene, opts: { title: string; text: string; 
   opts.options.forEach((o, i) => {
     const b = new Button(scene, x + 10, cy, `${i + 1}. ${o.label}`, () => { cleanup(); opts.onChoose(i); }, { w: w - 20, h: optH[i] - 2 });
     b.label.setOrigin(0, 0).setX(8).setY(4).setLeftAlign?.();
-    if (o.detail) b.add(txt(scene, 14, 15, o.detail, { color: C.blue, maxWidth: w - 44 }));
+    let oy = 15;
+    for (const t of subs[i]) { t.setPosition(14, oy); b.add(t); oy += t.height; }
+    void o;
     c.add(b); buttons.push(b);
     cy += optH[i];
   });

@@ -92,9 +92,14 @@ export class ReportScene extends Phaser.Scene {
       y += 6; line('SCORE DETAILS', C.gold2);
       for (const p of r.parts) line(`${p.label}: ${p.note}`, C.text);
     } else if (i === 2) {
-      line('CRITICAL DECISIONS', C.gold2);
+      line(`DECISION LOG  (seed ${r.seed})`, C.gold2);
+      line(`★ = Flight Director pick.  Bonus +${r.fdBonus}.  Mission points ${r.missionPoints.toLocaleString('en-US')}.`, C.teal);
       if (!r.decisions.length) line('No emergencies required a decision.', C.dim);
-      for (const d of r.decisions) { line(`• ${d.event}`, C.orange); line(`→ ${d.choice}`, C.white, 8); }
+      for (const d of r.decisions) {
+        line(`${d.fd ? '★' : '•'} ${d.event}`, C.orange);
+        line(`→ ${d.choice}`, C.white, 8);
+        if (d.bad) line(`Cost: ${d.bad}`, C.red, 8);
+      }
       if (r.failures.length) { y += 4; line('PROBLEMS & FAILURE CAUSES', C.gold2); for (const f of r.failures) line(`• ${f}`, C.red); }
     } else if (i === 3) {
       line('RECOMMENDED IMPROVEMENTS', C.gold2);
