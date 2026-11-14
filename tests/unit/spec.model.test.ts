@@ -112,6 +112,26 @@ describe('spec model: the physics lessons', () => {
   });
 });
 
+describe('spec model: thruster fuel', () => {
+  it('thruster fuel = tank gallons × 8.52 lb/gal; two dockings use 40 lb each', () => {
+    const s = analyzeDesign(REFERENCE_DESIGN);
+    expect(kgToLb(s.spec!.rcs.fuelKg)).toBeCloseTo(136 * 8.52, 6);
+    expect(s.spec!.rcs.dockings).toBe(2);
+    expect(kgToLb(s.spec!.rcs.plannedKg)).toBeCloseTo(80, 6);
+  });
+  it('the mission drains thruster fuel at each docking (transposition, rendezvous)', () => {
+    const m = createMission(REFERENCE_DESIGN, 11); m.schedule = [];
+    const start = analyzeDesign(REFERENCE_DESIGN).spec!.rcs.fuelKg;
+    expect(kgToLb(start - m.rcsFuelKg)).toBeCloseTo(40, 6); // transposition right after TLI
+    const done = flyMission(m);
+    expect(kgToLb(start - done.rcsFuelKg)).toBeCloseTo(80, 6);
+  });
+  it('no thruster tank means no fuel for docking: blocking', () => {
+    const d = cloneDesign(REFERENCE_DESIGN); d.spec = { ...d.spec, thrusterTank: 'none' };
+    expect(status(d, 'docking')).toBe('fail');
+  });
+});
+
 describe('spec model: material + fuel risks', () => {
   const b = (material: 'carbon' | 'alli') => ({ ...ROCKET_PRESETS.estuary, stage2: { ...ROCKET_PRESETS.estuary.stage2, material } });
   it('carbon fiber + hydrogen is High; a metal liner drops it to Medium', () => {

@@ -9,7 +9,7 @@
 import type { Design } from '../data/mission';
 import { SITE_BY_ID, TEMPO_BY_ID } from '../data/mission';
 import {
-  BUDGETS_USD, CAPSULE_BY_ID, COAST_DAYS, DOCKING, FIXES, LAUNCH_OPS_USD, LANDER_SPEC_BY_ID, MIN_THRUSTERS, MISSION_BASE_MB_PER_DAY, NAV,
+  BUDGETS_USD, CAPSULE_BY_ID, COAST_DAYS, DOCKING, DOCKING_FUEL_LB, FIXES, THRUSTER_FUEL_LB_PER_GAL, LAUNCH_OPS_USD, LANDER_SPEC_BY_ID, MIN_THRUSTERS, MISSION_BASE_MB_PER_DAY, NAV,
   ORBITS, POWER_PARTS, ROCKET_PRESETS, RocketBuild, SpecDesign, SUPPLIES_USD_PER_CREW_DAY, THRUSTERS, THRUSTER_TANKS, OrbitSpec,
 } from '../data/specParts';
 import * as K from './constants';
@@ -25,7 +25,7 @@ export const CAPSULE_OWNED_SLOTS = ['propulsion', 'tank', 'heatShield'];
 export const DEFAULT_SPEC: SpecDesign = {
   architecture: 'apollo', orbit: 'LLO', capsule: 'cap_apollo', rocket: null,
   docking: ['dock_nds', 'dock_lidar'],
-  thruster: 'rcs_mr107s', thrusterCount: 12, thrusterTank: 'tank_ost24',
+  thruster: 'rcs_mr107s', thrusterCount: 12, thrusterTank: 'tank_antrix516',
   nav: ['nav_st16', 'nav_imu', 'nav_obc'],
   landerPacks: 2, landerSolar: true,
   fixes: [], difficulty: 'easy', role: null,
@@ -77,6 +77,7 @@ export interface SpecStats {
   capsuleReturn: { usedInKg: number; leftKg: number; dvLeft: number; need: number; pass: boolean };
   lander: { arrivalPropKg: number; moonTwrDescent: number; moonTwrAscent: number; batteryWh: number; solarW: number; grossLoadW: number } | null;
   dockingOk: boolean; thrusterCount: number; thrustersOk: boolean;
+  rcs: { tankGal: number; fuelKg: number; perDockingKg: number; dockings: number; plannedKg: number; ok: boolean };
   shieldHealth: number;
   data: { mbPerDay: number; needMbPerDay: number };
   risks: ActiveRisk[]; tankRisk: ActiveRisk['now'];
@@ -119,6 +120,9 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
   const ttank = THRUSTER_TANKS.find((t) => t.id === sp.thrusterTank);
   if (ttank) small.push({ label: ttank.name, kg: lbToKg(ttank.weightLb.v), w: 0, usd: ttank.priceUsd.v });
   for (const id of sp.nav) { const p = NAV.find((x) => x.id === id); if (p) small.push({ label: p.name, kg: lbToKg(p.weightLb?.v ?? 0), w: p.powerW?.v ?? 0, usd: p.priceUsd.v }); }
+  // thruster fuel = tank gallons × density; every docking / rendezvous uses a fixed amount (G)
+  const rcsFuelKg = ttank ? lbToKg(ttank.gallons.v * THRUSTER_FUEL_LB_PER_GAL.v) : 0;
+  if (rcsFuelKg > 0) small.push({ label: 'Thruster fuel', kg: rcsFuelKg, w: 0, usd: 0 });
   if (sp.fixes.includes('spareSeal')) small.push({ label: FIXES.spareSeal.name, kg: lbToKg(FIXES.spareSeal.weightLb!.v), w: 0, usd: FIXES.spareSeal.costUsd.v });
 
   // ------------------------------------------------------------ crew vehicle mass
@@ -162,7 +166,7 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
     { label: `Launch operations x${nLaunch}`, m: (LAUNCH_OPS_USD.v * nLaunch) / 1e6, ids: [] as string[] },
     { label: 'Crew supplies', m: (SUPPLIES_USD_PER_CREW_DAY.v * crew * missionDays) / 1e6, ids: [] as string[] },
     ...parts.map((p) => ({ label: p.name, m: p.costM, ids: [p.id] })),
-    ...small.map((x) => ({ label: x.label, m: x.usd / 1e6, ids: [] as string[] })),
+    ...small.filter((x) => x.usd > 0).map((x) => ({ label: x.label, m: x.usd / 1e6, ids: [] as string[] })),
     ...(packs ? [{ label: `${packs} x ${POWER_PARTS.liionPack.name} (lander)`, m: (packs * POWER_PARTS.liionPack.priceUsd.v) / 1e6, ids: [] as string[] }] : []),
     ...(solarOn ? [{ label: POWER_PARTS.landerSolar.name, m: POWER_PARTS.landerSolar.priceUsd.v / 1e6, ids: [] as string[] }] : []),
     ...sp.fixes.filter((f) => f !== 'spareSeal').map((f) => ({ label: FIXES[f].name, m: FIXES[f].costUsd.v / 1e6, ids: [] as string[] })),
@@ -259,6 +263,11 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
     lander: landerSpec,
     dockingOk: !lander || (sp.docking.includes('dock_nds') && sp.docking.includes('dock_lidar')),
     thrusterCount, thrustersOk: thrusterCount >= MIN_THRUSTERS.v,
+    rcs: (() => {
+      const dockings = lander ? 2 : 0; // Apollo: transposition + rendezvous; Artemis: dock in NRHO + rendezvous
+      const perDockingKg = lbToKg(DOCKING_FUEL_LB.v);
+      return { tankGal: ttank?.gallons.v ?? 0, fuelKg: rcsFuelKg, perDockingKg, dockings, plannedKg: dockings * perDockingKg, ok: rcsFuelKg >= dockings * perDockingKg };
+    })(),
     shieldHealth: health,
     data: { mbPerDay: downMbPerDay, needMbPerDay },
     risks, tankRisk: tankRisk(risks),

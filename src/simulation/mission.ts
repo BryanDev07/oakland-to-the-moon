@@ -37,6 +37,7 @@ export function createMission(design: Design, seed: number): MissionState {
     batteryWh: stats.power.batteryWh, batteryCapWh: stats.power.batteryWh,
     solarFactor: 1, fuelCellFactor: 1, reactantWh: stats.power.reactantWh, safeModeUntil: -1,
     landerAttached: !!lander,
+    rcsFuelKg: stats.spec?.rcs.fuelKg ?? 0,
     landerDescentPropKg: lander?.descentPropKg ?? 0, landerAscentPropKg: lander?.ascentPropKg ?? 0, landerBatteryWh: stats.lander.batteryWh ?? lander?.landerBatteryWh ?? 0,
     crewOnCsm: stats.crew, condition: 100,
     o2Kg: stats.consumables.o2Kg, waterKg: stats.consumables.waterKg, foodKg: stats.consumables.foodKg,
@@ -69,6 +70,7 @@ export function createMission(design: Design, seed: number): MissionState {
   }
   s.rngState = rng.state;
   log(s, 'Trans-lunar injection complete. TOWN-1 is on its way to the Moon!', 'good');
+  if (lander && K.SPEC_MODEL && specOf(d).architecture === 'apollo') dock(s, 'Transposition: the capsule turned around and docked with the lander');
   return s;
 }
 
@@ -358,6 +360,15 @@ export function burn(s: MissionState, name: string, dv: number, massKg = totalMa
   return { ok: true, propKg: need, shortKg: 0 };
 }
 
+/** A docking or rendezvous burns a fixed amount of thruster fuel (spec model, G). */
+export function dock(s: MissionState, label: string, kg = s.stats.spec?.rcs.perDockingKg ?? 0) {
+  if (!K.SPEC_MODEL || kg <= 0) return true;
+  const ok = s.rcsFuelKg >= kg;
+  s.rcsFuelKg = Math.max(0, s.rcsFuelKg - kg);
+  log(s, ok ? `${label}: ${fmt(kg / 0.45359237)} lb of thruster fuel used.` : `${label}: thruster fuel ran out during docking!`, ok ? 'info' : 'warn');
+  return ok;
+}
+
 export function executeLOI(s: MissionState) {
   if (s.phase !== 'LOI_PENDING') return { ok: false, propKg: 0, shortKg: 0 };
   const site = SITE_BY_ID[s.design.plan.site];
@@ -367,6 +378,7 @@ export function executeLOI(s: MissionState) {
   if (!tcm.ok) return tcm;
   const r = burn(s, 'Lunar orbit insertion', dv.loi);
   const halo = K.SPEC_MODEL && specOf(s.design).orbit === 'NRHO';
+  if (r.ok && halo && specOf(s.design).architecture === 'artemis' && s.landerAttached) dock(s, 'Docked with the waiting lander');
   if (r.ok) { setPhase(s, 'LUNAR_ORBIT'); log(s, halo ? 'Welcome to the halo orbit! Earth stays in view the whole time.' + (specOf(s.design).architecture === 'artemis' && s.landerAttached ? ' Docked with the waiting lander.' : '') : `Welcome to lunar orbit! ${site.name} passes below every 2 hours.`, 'good'); }
   return r;
 }
@@ -450,6 +462,7 @@ export function liftoff(s: MissionState): { ok: boolean; message: string } {
   s.crewOnCsm = s.stats.crew;
   setPhase(s, 'LUNAR_ORBIT_POST');
   log(s, `Liftoff! Ascent stage reached orbit and docked with ${Math.round(s.samplesAboardKg)} kg of samples.`, 'good');
+  dock(s, 'Rendezvous and docking with the capsule');
   return { ok: true, message: 'Ascent successful.' };
 }
 

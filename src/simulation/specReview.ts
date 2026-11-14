@@ -82,13 +82,15 @@ export function applySpecReview(d: Design, s: DesignStats, checks: ReviewCheck[]
   });
 
   // ---- docking + thrusters
-  const dockOk = S.dockingOk && S.thrustersOk;
+  const dockOk = S.dockingOk && S.thrustersOk && S.rcs.ok;
   checks.push({
     id: 'docking', title: 'Docking & thrusters', icon: 'guidance', status: dockOk ? 'pass' : 'fail',
-    value: `${S.thrusterCount} thrusters${s.lander.present ? (S.dockingOk ? ', docking OK' : ', NO docking') : ''}`,
+    value: `${S.thrusterCount} thrusters, ${fmt(kgToLb(S.rcs.fuelKg))} lb fuel${s.lander.present && !S.dockingOk ? ', NO docking' : ''}`,
     detail: !S.dockingOk ? 'Crew can only move between capsule and lander through a NASA Docking System, guided by a docking lidar.'
-      : !S.thrustersOk ? `You need at least ${MIN_THRUSTERS.v} thrusters to turn and move in every direction.` : 'Docking hardware and steering thrusters in place.',
-    fix: dockOk ? undefined : !S.dockingOk ? 'Add the NASA Docking System and the docking lidar.' : `Add thrusters (at least ${MIN_THRUSTERS.v}).`,
+      : !S.thrustersOk ? `You need at least ${MIN_THRUSTERS.v} thrusters to turn and move in every direction.`
+      : !S.rcs.ok ? `${S.rcs.dockings} dockings need ${fmt(kgToLb(S.rcs.plannedKg))} lb of thruster fuel; the tank holds ${fmt(kgToLb(S.rcs.fuelKg))} lb.`
+      : `Docking hardware and steering thrusters in place. Thruster fuel ${fmt(kgToLb(S.rcs.fuelKg))} lb (${fmt(S.rcs.tankGal)} gal); ${S.rcs.dockings} dockings use ${fmt(kgToLb(S.rcs.plannedKg))} lb.`,
+    fix: dockOk ? undefined : !S.dockingOk ? 'Add the NASA Docking System and the docking lidar.' : !S.thrustersOk ? `Add thrusters (at least ${MIN_THRUSTERS.v}).` : 'Pick a thruster tank.',
     culprits: [],
   });
 

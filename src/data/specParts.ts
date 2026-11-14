@@ -121,6 +121,9 @@ export const THRUSTER_TANKS: ThrusterTankSpec[] = [
   { id: 'tank_ost24', name: 'OST 24/0 titanium tank', weightLb: R(116), gallons: R(319), priceUsd: G(900_000), titanium: true },
 ];
 export const MIN_THRUSTERS = G(8, 'needed to turn and move in every direction');
+/** Thruster fuel = tank gallons × density. */
+export const THRUSTER_FUEL_LB_PER_GAL = R(8.52, 'hydrazine at 20 °C, 1.021 kg/L; the game uses it for every thruster type (G simplification)');
+export const DOCKING_FUEL_LB = G(40, 'thruster fuel used by one docking or rendezvous');
 
 // ---------------------------------------------------------------------------- power (tab 3 §9)
 export const POWER_PARTS = {

@@ -42,6 +42,7 @@ export interface MissionState {
   landerDescentPropKg: number;
   landerAscentPropKg: number;
   landerBatteryWh: number;
+  rcsFuelKg: number; // thruster (RCS) fuel left; dockings use it (spec model)
   // crew
   crewOnCsm: number;
   condition: number; // 0..100

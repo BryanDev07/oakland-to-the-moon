@@ -86,7 +86,7 @@ export const DEFAULT_PLAN: MissionPlan = { lv: 'estuary', site: 'equator', crew:
 /** Apollo-style choices shared by the reference and baseline designs (spec tab 2). */
 const APOLLO_SPEC: Partial<SpecDesign> = {
   architecture: 'apollo', orbit: 'LLO', capsule: 'cap_apollo', rocket: null,
-  docking: ['dock_nds', 'dock_lidar'], thruster: 'rcs_mr107s', thrusterCount: 12, thrusterTank: 'tank_ost24',
+  docking: ['dock_nds', 'dock_lidar'], thruster: 'rcs_mr107s', thrusterCount: 12, thrusterTank: 'tank_antrix516',
   nav: ['nav_st16', 'nav_imu', 'nav_obc'], landerPacks: 2, landerSolar: true, fixes: [], difficulty: 'easy', role: null,
 };
 
