@@ -217,6 +217,30 @@ export const Tooltip = {
 export interface Line { who: string; text: string; portrait?: string }
 const SPEEDS = { slow: 22, normal: 45, fast: 90, instant: 100000 };
 /**
+ * Split text into pages that fit (fits() measures one page), breaking between sentences whenever a
+ * sentence fits on a page, and between words only when one sentence is too long for a page.
+ */
+export function pageBySentence(text: string, fits: (s: string) => boolean): string[] {
+  const sentences = text.replace(/\s+/g, ' ').trim().split(/(?<=[.!?:;])\s+(?=[A-Z0-9"'(])/);
+  const pages: string[] = [];
+  let cur = '';
+  const pushWords = (sentence: string) => {
+    for (const word of sentence.split(' ')) {
+      const next = cur ? `${cur} ${word}` : word;
+      if (!fits(next) && cur) { pages.push(cur); cur = word; } else cur = next;
+    }
+  };
+  for (const sen of sentences) {
+    const next = cur ? `${cur} ${sen}` : sen;
+    if (fits(next)) { cur = next; continue; }
+    if (cur) { pages.push(cur); cur = ''; }
+    if (fits(sen)) cur = sen; else pushWords(sen);
+  }
+  if (cur) pages.push(cur);
+  return pages.length ? pages : [''];
+}
+
+/**
  * Character dialogue (Director Cole, CAPCOM Sam, Commander Kai, Mission Control). Readable 15 px text
  * in a box no taller than about a quarter of the screen, anchored to the top or bottom edge (away
  * from the action). Long lines are split into pages (click / Enter for the next page); the box never grows.
@@ -268,14 +292,7 @@ export class Dialogue extends Phaser.GameObjects.Container {
     const big = largeText();
     const probe = txt(this.scene, 0, -999, '', { maxWidth: w, size: big ? 20 : 15 });
     const maxH = big ? 2 * 21 + 2 : Dialogue.LINES * 16 + 2;
-    const pages: string[] = [];
-    let cur = '';
-    for (const word of l.text.split(/\s+/).filter(Boolean)) {
-      const next = cur ? `${cur} ${word}` : word;
-      probe.setText(next);
-      if (probe.height > maxH && cur) { pages.push(cur); cur = word; } else cur = next;
-    }
-    if (cur) pages.push(cur);
+    const pages = pageBySentence(l.text, (x) => { probe.setText(x); return probe.height <= maxH; }); // pages end at sentences
     probe.destroy();
     return pages.map((t) => ({ ...l, text: t }));
   }
@@ -433,14 +450,7 @@ export function toast(scene: Phaser.Scene, who: string, text: string, portrait =
   const run = () => {
     q.busy = true;
     const probe = txt(scene, 0, -999, '', { maxWidth: 214, size: 15 });
-    const pages: string[] = [];
-    let cur = '';
-    for (const word of text.split(/\s+/).filter(Boolean)) {
-      const next = cur ? `${cur} ${word}` : word;
-      probe.setText(next);
-      if (probe.height > 2 * 16 + 2 && cur) { pages.push(cur); cur = word; } else cur = next;
-    }
-    if (cur) pages.push(cur);
+    const pages = pageBySentence(text, (x) => { probe.setText(x); return probe.height <= 2 * 16 + 2; }); // pages end at sentences
     probe.destroy();
     const done = () => { q.busy = false; const nxt = q.queue.shift(); if (nxt && scene.sys.isActive()) nxt(); };
     const show = (i: number) => {

@@ -15,6 +15,7 @@ import { showEmergency } from '../ui/emergency';
 import { applyFlightPick, dueFlightCard, FlightCard } from '../../simulation/roleDecisions';
 import { showRoleCard } from '../ui/roleCard';
 import { ISS, missionOf } from '../../data/missionConfig';
+import { headline } from '../ui/headline';
 
 const SPEEDS = [0, 12, 48, 192]; // sim steps (5 min each) per real second
 const PHASE_LABEL: Record<string, string> = {
@@ -120,8 +121,10 @@ export class OpsScene extends Phaser.Scene {
       this.speedBtns.push(b);
     });
     this.controls = this.add.container(0, 0);
-    this.logText = txt(this, 246, 242, '', { color: C.dim, maxWidth: 228 }).setVisible(false); // replaced by logBox
+    this.logText = txt(this, 246, 242, '', { color: C.text, maxWidth: 196 }); // the latest message: one complete sentence, 2 lines max
     this.logShown = ''; this.logBox = null;
+    new Button(this, 446, 242, 'LOG', () => this.openLog(), { w: 30, h: 13, tooltip: 'All recent messages (key L)' });
+    this.input.keyboard?.on('keydown-L', () => this.openLog());
     learned(this, 'resources', 2500); // D1: fuel, power, oxygen, water and data in flight
     gearButton(this);
     crt(this);
@@ -385,6 +388,25 @@ export class OpsScene extends Phaser.Scene {
     g.fillStyle(0xffe27a).fillRect(Math.round(ex + Math.cos(me) * r) - 1, Math.round(ey + Math.sin(me) * r) - 1, 3, 3); // you
   }
 
+  /** The mission log: the last messages in full, newest first (L or the LOG button; Esc / click closes). */
+  openLog() {
+    const s = this.s;
+    if (this.modalOpen || this.logOpen) return;
+    this.logOpen = true;
+    const was = this.speed; this.setSpeed(0);
+    const c = this.add.container(0, 0).setDepth(950);
+    c.add(this.add.rectangle(0, 0, W, 270, 0x04030c, 0.75).setOrigin(0, 0).setInteractive());
+    c.add(panel(this, 30, 16, W - 60, 238, 'panel'));
+    c.add(txt(this, W / 2, 22, 'MISSION LOG (newest first)', { align: 'center', color: C.gold }));
+    const lines = s.log.slice(-14).reverse().map((e) => `${fmtTime(e.t)}  ${e.text}`).join('\n');
+    c.add(pagedText(this, 40, 36, W - 80, 196, lines, { color: C.text }));
+    c.add(txt(this, W / 2, 238, 'Esc, L or click to close', { align: 'center', color: C.dim }));
+    const close = () => { if (!this.logOpen) return; this.logOpen = false; c.destroy(); this.setSpeed(was); this.input.keyboard?.off('keydown', key); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === 'l' || e.key === 'L') close(); };
+    this.time.delayedCall(50, () => { this.input.keyboard?.on('keydown', key); (c.list[0] as Phaser.GameObjects.Rectangle).on('pointerup', close); });
+  }
+  logOpen = false;
+
   renderUI() {
     const s = this.s;
     this.phaseText.setText((this.iss ? ISS_LABEL[s.phase] : undefined) ?? PHASE_LABEL[s.phase] ?? s.phase);
@@ -419,10 +441,12 @@ export class OpsScene extends Phaser.Scene {
     this.linkText.setText(`LINK ${rate > 0 ? fmt(rate * 1000) + ' kbps' : 'DOWN'} • LOST ${(s.lostMB / 1000).toFixed(0)} GB`).setTint(rate > 0 ? C.dim : C.orange);
     const last = s.log[s.log.length - 1];
     if (last && last.text !== this.logShown) {
-      // never clip (A3): the latest log line pages inside its strip, turning every 3 s
+      // the latest message as one complete sentence that fits 2 lines; the rest is in the LOG
       this.logShown = last.text;
-      this.logBox?.destroy();
-      this.logBox = pagedText(this, 246, 242, 228, 24, last.text, { color: last.kind === 'bad' || last.kind === 'event' ? C.red : last.kind === 'warn' ? C.orange : last.kind === 'good' ? C.green : C.text, autoMs: 3000 });
+      const probe = txt(this, 0, -999, '', { maxWidth: 196 });
+      const line = headline(last.text, (x) => { probe.setText(x); return probe.height <= 24; });
+      probe.destroy();
+      this.logText.setText(line).setTint(last.kind === 'bad' || last.kind === 'event' ? C.red : last.kind === 'warn' ? C.orange : last.kind === 'good' ? C.green : C.text);
     }
     // contextual coaching (once each)
     const once = (k: string, cond: boolean, who: string, text: string) => { if (cond && !this.said[k]) { this.said[k] = true; toast(this, who, text, 'portrait_capcom', 6000); } };

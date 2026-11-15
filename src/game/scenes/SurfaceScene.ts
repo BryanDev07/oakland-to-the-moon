@@ -102,10 +102,10 @@ export class SurfaceScene extends Phaser.Scene {
       const y = 17 + i * 23;
       if (y > 196) return;
       const label = `${av.a.name}`;
-      const b = new Button(this, 334, y, label, () => this.act(av.a.id), { w: 140, h: 22, tooltip: `${av.a.desc}\n${av.a.hours} h EVA${av.a.points ? `, +${av.a.points} science` : ''}${av.a.sampleKg ? `, +${fmtLb(av.a.sampleKg)} of samples` : ''}.${av.ok ? '' : '\nUNAVAILABLE: ' + av.reason}\n\nWHY: ${av.a.learn}` });
+      const b = new Button(this, 334, y, label, () => this.act(av.a.id), { w: 140, h: 22, tooltip: `${av.a.desc}\n${av.a.hours} h EVA${av.a.points ? `, +${Math.round(av.a.points)} science` : ''}${av.a.sampleKg ? `, +${fmtLb(av.a.sampleKg)} of samples` : ''}.${av.ok ? '' : '\nUNAVAILABLE: ' + av.reason}\n\nWHY: ${av.a.learn}` });
       b.label.setOrigin(0, 0).setX(16).setY(1).setTint(av.ok ? C.white : C.dim);
       b.add(this.add.image(3, 3, 'icons', iconFrame(av.ok ? av.a.icon : 'lock')).setOrigin(0, 0));
-      b.add(txt(this, 16, 11, av.ok ? `${av.a.hours} h${av.a.points ? `  +${av.a.points} sci` : ''}${av.a.sampleKg ? `  +${fmtLb(av.a.sampleKg)}` : ''}` : av.reason, { color: av.ok ? C.teal : C.orange }));
+      b.add(txt(this, 16, 11, av.ok ? `${av.a.hours} h${av.a.points ? `  +${Math.round(av.a.points)} sci` : ''}${av.a.sampleKg ? `  +${fmtLb(av.a.sampleKg)}` : ''}` : av.reason, { color: av.ok ? C.teal : C.orange }));
       if (!av.ok) b.setDisabled(true);
       this.list.add(b);
     });
