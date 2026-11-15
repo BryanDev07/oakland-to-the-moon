@@ -14,6 +14,8 @@ import { fmt, fmtLb, kgToLb } from '../../simulation/units';
 import { showEmergency } from '../ui/emergency';
 import { applyFlightPick, dueFlightCard, FlightCard } from '../../simulation/roleDecisions';
 import { showRoleCard } from '../ui/roleCard';
+import { ISS, missionOf } from '../../data/missionConfig';
+import { headline } from '../ui/headline';
 
 const SPEEDS = [0, 12, 48, 192]; // sim steps (5 min each) per real second
 const PHASE_LABEL: Record<string, string> = {
@@ -21,7 +23,12 @@ const PHASE_LABEL: Record<string, string> = {
   TRANSIT_BACK: 'TRANS-EARTH COAST', FREE_RETURN: 'FREE-RETURN ABORT', ENTRY: 'EARTH ENTRY', COMPLETE: 'MISSION COMPLETE', DESCENT: 'DESCENT', SURFACE: 'SURFACE OPS',
 };
 
+/** ISS mission (missionOf): the same screen flies a 1-day phasing coast to the station. */
+const ISS_LABEL: Record<string, string> = { TRANSIT_OUT: 'CATCHING THE ISS', LOI_PENDING: 'ISS IN SIGHT', ENTRY: 'EARTH ENTRY', COMPLETE: 'MISSION COMPLETE' };
+
 export class OpsScene extends Phaser.Scene {
+  iss = false;
+  station!: Phaser.GameObjects.Container;
   s!: MissionState;
   speed = 1;
   acc = 0;
@@ -62,8 +69,12 @@ export class OpsScene extends Phaser.Scene {
     this.earth = this.add.image(40, 84, 'earth_med');
     this.moon = this.add.image(280, 84, 'moon_med');
     this.moonBig = this.add.image(159, 290, 'moon_big').setScale(1.5);
-    this.craft = new SpacecraftView(this, 0, 0, s.design, 'flight');
-    this.view.add([this.starsFar, this.starsNear, this.earth, this.moon, this.moonBig, this.craft]);
+    this.iss = missionOf(s.design) === 'iss';
+    this.craft = new SpacecraftView(this, 0, 0, s.design, this.iss ? 'csm' : 'flight'); // ISS: no lander
+    this.station = this.makeStation();
+    this.station.setVisible(this.iss);
+    if (this.iss) { this.moon.setVisible(false); this.moonBig.setVisible(false); }
+    this.view.add([this.starsFar, this.starsNear, this.earth, this.moon, this.moonBig, this.station, this.craft]);
     this.burnFlame = this.add.sprite(0, 0, 'flame').setAngle(90).setOrigin(0.5, 0).play('flame').setVisible(false);
     this.view.add(this.burnFlame);
     this.shadow = this.add.rectangle(0, 0, 318, 168, 0x02020a, 0.55).setOrigin(0, 0);
@@ -79,9 +90,9 @@ export class OpsScene extends Phaser.Scene {
     this.nextText = txt(this, 326, 42, '', { color: C.text, maxWidth: 148 });
     panel(this, 320, 72, 160, 98, 'panel_dark');
     this.traj = this.add.graphics();
-    this.add.image(338, 121, 'earth_small').setScale(0.6);
-    this.add.image(462, 121, 'moon_small').setScale(0.5);
-    txt(this, 400, 77, 'TRAJECTORY', { align: 'center', color: C.teal });
+    if (this.iss) this.add.image(400, 124, 'earth_small').setScale(0.9); // ISS: Earth orbit with the station
+    else { this.add.image(338, 121, 'earth_small').setScale(0.6); this.add.image(462, 121, 'moon_small').setScale(0.5); }
+    txt(this, 400, 77, this.iss ? 'ORBIT' : 'TRAJECTORY', { align: 'center', color: C.teal });
     // ------------------------------------------------ resources
     panel(this, 0, 170, 240, 100, 'panel');
     const mk = (k: string, x: number, y: number, label: string, ic: string, tip: string) => {
@@ -92,7 +103,7 @@ export class OpsScene extends Phaser.Scene {
       hit.on('pointerout', () => Tooltip.hide());
     };
     mk('fuel', 6, 175, 'FUEL', 'fuel', 'Service-module propellant. The marker shows what the remaining burns need. Below the marker = cannot get home!');
-    mk('battery', 124, 175, 'BATTERY', 'battery', 'Stored energy (Wh). Drains whenever load exceeds generation, e.g. in the Moon\'s shadow.');
+    mk('battery', 124, 175, 'BATTERY', 'battery', 'Stored energy (Wh). Drains whenever load exceeds generation, e.g. in shadow.');
     mk('power', 6, 197, 'POWER', 'power', 'Generation vs electrical load right now (W).');
     mk('heat', 124, 197, 'HEAT', 'thermal', 'Waste heat vs radiator capacity. Over 100% forces instruments off.');
     mk('o2', 6, 219, 'OXYGEN', 'o2', 'Cabin oxygen remaining (lb). 2.0 lb per astronaut per day.');
@@ -110,8 +121,10 @@ export class OpsScene extends Phaser.Scene {
       this.speedBtns.push(b);
     });
     this.controls = this.add.container(0, 0);
-    this.logText = txt(this, 246, 242, '', { color: C.dim, maxWidth: 228 }).setVisible(false); // replaced by logBox
+    this.logText = txt(this, 246, 242, '', { color: C.text, maxWidth: 196 }); // the latest message: one complete sentence, 2 lines max
     this.logShown = ''; this.logBox = null;
+    new Button(this, 446, 242, 'LOG', () => this.openLog(), { w: 30, h: 13, tooltip: 'All recent messages (key L)' });
+    this.input.keyboard?.on('keydown-L', () => this.openLog());
     learned(this, 'resources', 2500); // D1: fuel, power, oxygen, water and data in flight
     gearButton(this);
     crt(this);
@@ -121,9 +134,9 @@ export class OpsScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-THREE', () => this.setSpeed(3));
     this.setSpeed(1);
     this.onPhase(true);
-    const chap = s.phase === 'TRANSIT_OUT' ? [4, 'THE JOURNEY'] : s.phase === 'LOI_PENDING' || s.phase === 'LUNAR_ORBIT' ? [5, 'LUNAR OPERATIONS'] : s.phase === 'LUNAR_ORBIT_POST' || s.phase === 'TRANSIT_BACK' || s.phase === 'FREE_RETURN' ? [6, 'THE RETURN'] : null;
+    const chap = s.phase === 'TRANSIT_OUT' ? [4, this.iss ? 'CATCHING UP' : 'THE JOURNEY'] : s.phase === 'LOI_PENDING' || s.phase === 'LUNAR_ORBIT' ? [5, 'LUNAR OPERATIONS'] : s.phase === 'LUNAR_ORBIT_POST' || s.phase === 'TRANSIT_BACK' || s.phase === 'FREE_RETURN' ? [6, 'THE RETURN'] : null;
     if (chap && !store.seen[`chap${chap[0]}`]) { this.setSpeed(0); chapterCard(this, chap[0] as number, chap[1] as string, () => { if (this.speed === 0) this.setSpeed(1); }); store.markSeen(`chap${chap[0]}`); }
-    if (s.phase === 'TRANSIT_OUT' && s.t < 3600) this.time.delayedCall(2600, () => toast(this, 'CAPCOM Sam', 'Three days to the Moon. Watch power and supplies; use the speed buttons to fast-forward. We will call if anything comes up.', 'portrait_capcom', 6500));
+    if (s.phase === 'TRANSIT_OUT' && s.t < 3600) this.time.delayedCall(2600, () => toast(this, 'CAPCOM Sam', this.iss ? 'One day of phasing orbits to catch the ISS. Fast-forward if all is well.' : 'Three days to the Moon. Fast-forward if all is well.', 'portrait_capcom', 5000));
     this.input.once('pointerdown', () => audio.unlock());
   }
 
@@ -172,6 +185,7 @@ export class OpsScene extends Phaser.Scene {
         act('COASTING...  (FAST-FORWARD ▶▶)', () => this.setSpeed(3), 'Nothing to do but monitor systems. Fast-forward if all is well.', 'normal');
         break;
       case 'LOI_PENDING': {
+        if (this.iss) { this.setSpeed(0); this.time.delayedCall(900, () => fadeTo(this, 'Docking')); break; } // E3: on to the docking
         const ok = Sim.canAffordLOIAndReturn(s);
         act('EXECUTE LUNAR ORBIT INSERTION', () => this.doLOI(), `Brake into lunar orbit: ${missionDv(s.design).loi} m/s.`, 'go', 220, 150);
         act('FREE RETURN', () => this.doFreeReturn(), 'Abort: loop around the Moon and come home without landing. Uses almost no propellant.', 'normal', 220, 74, 400);
@@ -190,13 +204,13 @@ export class OpsScene extends Phaser.Scene {
     }
     this.refreshControls();
     // milestone messages
-    if (s.phase === 'LOI_PENDING') { audio.sfx('warn'); toast(this, 'CAPCOM Sam', 'The Moon fills the window! Ready for the lunar orbit insertion burn when you are.', 'portrait_capcom', 5000); }
+    if (s.phase === 'LOI_PENDING' && !this.iss) { audio.sfx('warn'); toast(this, 'CAPCOM Sam', 'The Moon fills the window! Ready for the lunar orbit insertion burn when you are.', 'portrait_capcom', 5000); }
     if (s.phase === 'LUNAR_ORBIT' && !this.said.orbit) { this.said.orbit = true; this.time.delayedCall(800, () => toast(this, 'Director Cole', Object.keys(s.instruments).length ? 'In orbit! Switch on your instruments: the camera only images in sunlight. Descend when ready.' : 'In orbit! Begin descent when ready.', 'portrait_director', 6500)); }
     if (s.phase === 'LUNAR_ORBIT_POST' && !this.said.post) { this.said.post = true; this.time.delayedCall(800, () => toast(this, 'CAPCOM Sam', 'Crew reunited in the capsule. Burn for home when you are ready.', 'portrait_capcom', 5000)); }
     if (s.phase === 'ENTRY') { this.time.delayedCall(600, () => fadeTo(this, 'Return')); }
     if (s.phase === 'COMPLETE') { this.time.delayedCall(1200, () => fadeTo(this, 'Report')); }
     if (s.phase === 'TRANSIT_BACK' && !store.seen.chap6) { this.setSpeed(0); chapterCard(this, 6, 'THE RETURN', () => { if (this.speed === 0) this.setSpeed(1); }); store.markSeen('chap6'); }
-    if (s.phase === 'LOI_PENDING' && !store.seen.chap5) { chapterCard(this, 5, 'LUNAR OPERATIONS'); store.markSeen('chap5'); }
+    if (s.phase === 'LOI_PENDING' && !this.iss && !store.seen.chap5) { chapterCard(this, 5, 'LUNAR OPERATIONS'); store.markSeen('chap5'); }
   }
 
   refreshControls() {
@@ -304,12 +318,13 @@ export class OpsScene extends Phaser.Scene {
     const bob = Math.sin(tNow * 1.4) * 2;
     let prog = 0;
     const orbit = s.phase === 'LUNAR_ORBIT' || s.phase === 'LUNAR_ORBIT_POST';
-    if (s.phase === 'TRANSIT_OUT') prog = Sim.phaseTime(s) / TRANSIT_OUT_S;
+    if (s.phase === 'TRANSIT_OUT') prog = Sim.phaseTime(s) / (this.iss ? ISS.phasingDays.v * 86400 : TRANSIT_OUT_S);
     else if (s.phase === 'TRANSIT_BACK') prog = 1 - Sim.phaseTime(s) / TRANSIT_BACK_S;
     else if (s.phase === 'FREE_RETURN') prog = 1 - Sim.phaseTime(s) / FREE_RETURN_S;
     else if (s.phase === 'LOI_PENDING') prog = 1;
     prog = Phaser.Math.Clamp(prog, 0, 1);
     this.earth.setVisible(!orbit).setPosition(34 - prog * 20, 84 + prog * 20).setScale(Phaser.Math.Linear(1.05, 0.4, prog));
+    if (this.iss) { this.renderIssView(prog, bob); return; }
     this.moon.setVisible(!orbit).setPosition(280 - (1 - prog) * 20 + prog * 0, 84).setScale(Phaser.Math.Linear(0.35, 1.6, prog));
     this.moonBig.setVisible(orbit);
     if (orbit) this.moonBig.setAngle(this.moonBig.angle + dt * 1.2 * warp);
@@ -344,15 +359,64 @@ export class OpsScene extends Phaser.Scene {
     else g.fillStyle(0xffe27a).fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 3, 3);
   }
 
+  /** A small pixel-art station: truss, modules and four solar wings (no new art files). */
+  makeStation() {
+    const c = this.add.container(280, 70);
+    const g = this.add.graphics();
+    g.fillStyle(0x1a1626).fillRect(-30, -2, 60, 5); // truss outline
+    g.fillStyle(0xb9b3a2).fillRect(-29, -1, 58, 3);
+    for (const x of [-27, -19, 13, 21]) { g.fillStyle(0x1a1626).fillRect(x, -14, 7, 29); g.fillStyle(0x2a4c98).fillRect(x + 1, -13, 5, 27); g.fillStyle(0x6f9be0).fillRect(x + 1, -13, 5, 1); }
+    g.fillStyle(0x1a1626).fillRect(-6, -6, 13, 13); g.fillStyle(0xe9e4d4).fillRect(-5, -5, 11, 11); // modules
+    g.fillStyle(0xe9e4d4).fillRect(-3, 6, 7, 8); g.fillStyle(0x8a8478).fillRect(-1, 13, 3, 3); // docking port
+    c.add(g);
+    return c;
+  }
+  /** ISS phasing: Earth below, the station growing as the gap closes; the orbit map shows both. */
+  renderIssView(prog: number, bob: number) {
+    const s = this.s;
+    this.earth.setVisible(true).setPosition(50, 175).setScale(1.5); // Earth below, clear of the capsule
+    this.station.setPosition(300 - prog * 50, 60).setScale(0.6 + prog * 0.9);
+    this.craft.setPosition(170 + bob * 0.3, 70 + bob).setScale(0.8, 0.8);
+    this.burnFlame.setPosition(170 - 120, 70 + bob).setAngle(90);
+    this.shadow.setVisible(false);
+    this.viewLabel.setText(s.phase === 'LOI_PENDING' ? 'THE ISS IS IN SIGHT' : `CATCHING UP: ${Math.round((1 - prog) * 300)} MILES BEHIND`).setTint(C.gold2);
+    const g = this.traj; g.clear();
+    const ex = 400, ey = 124, r = 34;
+    g.lineStyle(1, 0x2e9088, 0.8).strokeCircle(ex, ey, r);
+    const st = -Math.PI / 2 + 0.4, me = st - (1 - prog) * 1.6; // the capsule closes the gap behind the station
+    g.fillStyle(0xffffff).fillRect(Math.round(ex + Math.cos(st) * r) - 2, Math.round(ey + Math.sin(st) * r) - 1, 5, 3); // ISS
+    g.fillStyle(0xffe27a).fillRect(Math.round(ex + Math.cos(me) * r) - 1, Math.round(ey + Math.sin(me) * r) - 1, 3, 3); // you
+  }
+
+  /** The mission log: the last messages in full, newest first (L or the LOG button; Esc / click closes). */
+  openLog() {
+    const s = this.s;
+    if (this.modalOpen || this.logOpen) return;
+    this.logOpen = true;
+    const was = this.speed; this.setSpeed(0);
+    const c = this.add.container(0, 0).setDepth(950);
+    c.add(this.add.rectangle(0, 0, W, 270, 0x04030c, 0.75).setOrigin(0, 0).setInteractive());
+    c.add(panel(this, 30, 16, W - 60, 238, 'panel'));
+    c.add(txt(this, W / 2, 22, 'MISSION LOG (newest first)', { align: 'center', color: C.gold }));
+    const lines = s.log.slice(-14).reverse().map((e) => `${fmtTime(e.t)}  ${e.text}`).join('\n');
+    c.add(pagedText(this, 40, 36, W - 80, 196, lines, { color: C.text }));
+    c.add(txt(this, W / 2, 238, 'Esc, L or click to close', { align: 'center', color: C.dim }));
+    const close = () => { if (!this.logOpen) return; this.logOpen = false; c.destroy(); this.setSpeed(was); this.input.keyboard?.off('keydown', key); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === 'l' || e.key === 'L') close(); };
+    this.time.delayedCall(50, () => { this.input.keyboard?.on('keydown', key); (c.list[0] as Phaser.GameObjects.Rectangle).on('pointerup', close); });
+  }
+  logOpen = false;
+
   renderUI() {
     const s = this.s;
-    this.phaseText.setText(PHASE_LABEL[s.phase] ?? s.phase);
+    this.phaseText.setText((this.iss ? ISS_LABEL[s.phase] : undefined) ?? PHASE_LABEL[s.phase] ?? s.phase);
     this.clockText.setText(fmtTime(s.t));
     let next = '';
-    if (s.phase === 'TRANSIT_OUT') next = `Lunar arrival in ${((TRANSIT_OUT_S - Sim.phaseTime(s)) / HOUR).toFixed(0)} h`;
+    if (s.phase === 'TRANSIT_OUT' && this.iss) next = `Docking in ${Math.max(0, (ISS.phasingDays.v * 24) - Sim.phaseTime(s) / HOUR).toFixed(0)} h`;
+    else if (s.phase === 'TRANSIT_OUT') next = `Lunar arrival in ${((TRANSIT_OUT_S - Sim.phaseTime(s)) / HOUR).toFixed(0)} h`;
     else if (s.phase === 'TRANSIT_BACK') next = `Earth entry in ${((TRANSIT_BACK_S - Sim.phaseTime(s)) / HOUR).toFixed(0)} h`;
     else if (s.phase === 'FREE_RETURN') next = `Earth entry in ${((FREE_RETURN_S - Sim.phaseTime(s)) / HOUR).toFixed(0)} h`;
-    else if (s.phase === 'LOI_PENDING') next = 'Decision: insertion burn or free-return abort';
+    else if (s.phase === 'LOI_PENDING') next = this.iss ? 'Docking approach' : 'Decision: insertion burn or free-return abort';
     else if (s.phase === 'LUNAR_ORBIT') { const map = s.instruments['sci_mapcam']; next = `Orbit ${Math.floor(Sim.phaseTime(s) / 7080) + 1}${map ? `  •  map ${Math.min(100, Math.round(Sim.securedMB(s, 'map') / 1440))}%` : ''}`; }
     else if (s.phase === 'LUNAR_ORBIT_POST') next = `Samples aboard: ${fmtLb(s.samplesAboardKg)}`;
     this.nextText.setText(next + (s.pending ? '\nAWAITING DECISION' : this.speed === 0 ? '\nPAUSED' : ''));
@@ -377,10 +441,12 @@ export class OpsScene extends Phaser.Scene {
     this.linkText.setText(`LINK ${rate > 0 ? fmt(rate * 1000) + ' kbps' : 'DOWN'} • LOST ${(s.lostMB / 1000).toFixed(0)} GB`).setTint(rate > 0 ? C.dim : C.orange);
     const last = s.log[s.log.length - 1];
     if (last && last.text !== this.logShown) {
-      // never clip (A3): the latest log line pages inside its strip, turning every 3 s
+      // the latest message as one complete sentence that fits 2 lines; the rest is in the LOG
       this.logShown = last.text;
-      this.logBox?.destroy();
-      this.logBox = pagedText(this, 246, 242, 228, 24, last.text, { color: last.kind === 'bad' || last.kind === 'event' ? C.red : last.kind === 'warn' ? C.orange : last.kind === 'good' ? C.green : C.text, autoMs: 3000 });
+      const probe = txt(this, 0, -999, '', { maxWidth: 196 });
+      const line = headline(last.text, (x) => { probe.setText(x); return probe.height <= 24; });
+      probe.destroy();
+      this.logText.setText(line).setTint(last.kind === 'bad' || last.kind === 'event' ? C.red : last.kind === 'warn' ? C.orange : last.kind === 'good' ? C.green : C.text);
     }
     // contextual coaching (once each)
     const once = (k: string, cond: boolean, who: string, text: string) => { if (cond && !this.said[k]) { this.said[k] = true; toast(this, who, text, 'portrait_capcom', 6000); } };

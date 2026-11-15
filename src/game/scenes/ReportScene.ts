@@ -110,7 +110,7 @@ export class ReportScene extends Phaser.Scene {
       for (const l of r.lessons) line(`• ${l}`, C.teal);
     } else if (i === 6) {
       const es = endSummary(store.mission!, r);
-      line(`YOUR MISSION IS MOST LIKE ${es.like.toUpperCase()}`, C.gold2);
+      line(store.mission!.iss ? 'ISS RESCUE: DOCK & SPACEWALK' : `YOUR MISSION IS MOST LIKE ${es.like.toUpperCase()}`, C.gold2);
       line(es.likeWhy, C.white);
       y += 4; line(es.outcome, r.outcome === 'FULL_SUCCESS' ? C.green : r.outcome === 'MISSION_LOST' ? C.red : C.orange);
       if (es.margin) line(es.margin, C.white);

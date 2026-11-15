@@ -16,6 +16,12 @@ export const CAPSULE_RUNDOWN: Record<string, string> = {
   cap_budget: 'Cheap and roomy, but built for Earth orbit. Its 17,500 mph shield fails a return from the Moon (a trap).',
 };
 
+/** ISS mission (E2): the Budget capsule, a trap on the Moon, is the smart pick here; Orion is overkill. */
+export const ISS_CAPSULE_RUNDOWN: Record<string, string> = {
+  cap_budget: 'The smart pick for the ISS: cheap, 4 seats, and its 17,500 mph shield is exactly what low orbit needs.',
+  cap_orion: 'Overkill here: a $900,000,000 Moon capsule for a trip to low orbit.',
+  cap_apollo: 'It works, but it is heavier and pricier than this trip needs.',
+};
 export const ORBIT_RUNDOWN: Record<OrbitId, string> = {
   LLO: 'Apollo\'s orbit, about 60 miles up. Big capsule burns, a short lander trip, and contact lost behind the Moon.',
   NRHO: 'Artemis\'s halo orbit. Small capsule burns and constant contact, but a long trip down and up for the lander.',

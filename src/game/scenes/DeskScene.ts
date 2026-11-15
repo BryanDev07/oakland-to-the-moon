@@ -14,7 +14,8 @@ import { showRoleCard } from '../ui/roleCard';
 
 /** Desk colour roles (readability spec): numbers from your build, numbers to add, pass, fail. */
 /** B2 paper: charcoal text on cream, small dark accents (all readable on #F5EFD8). */
-const COL = { body: 0x222222, title: 0x222222, build: 0x1f3a93, add: 0x0f6b6b, pass: 0x1e6b2a, fail: 0x9b1c1c, explain: 0x4a4a4a, paper: 0xf5efd8, rule: 0xa8c8e8, margin: 0xd9534f };
+/** Paper: every line charcoal (#222), regular weight; only the verdict word is coloured (dark green PASS, dark red FAIL). */
+const COL = { body: 0x222222, title: 0x222222, build: 0x222222, add: 0x222222, pass: 0x222222, fail: 0x222222, explain: 0x222222, verdictPass: 0x1e6b2a, verdictFail: 0x9b1c1c, paper: 0xf5efd8, rule: 0xa8c8e8, margin: 0xd9534f };
 /** The dark side panel keeps light text. */
 const SCOL = { body: 0xfff4d6, title: 0xffd27a, build: 0xffe14a, add: 0x6ff0ff, pass: 0x7cf07c, fail: 0xff6a5a, explain: 0xb8e6ff };
 const BODY = 15, BIG = 20; // side panel sizes (1.5x and 2x of the pixel font)
@@ -262,13 +263,13 @@ export class DeskScene extends Phaser.Scene {
     if (this.onBoard()) { this.pencil.setVisible(false); this.pencilY = -1; this.renderBoard(); return; }
     this.pencil.setVisible(true);
     const sh = this.sheet;
-    type Line = { s: string; color: number; dx?: number; size?: number };
+    type Line = { s: string; color: number; dx?: number; size?: number; think?: boolean };
     const header: Line[] = [
       { s: `${sh.n}. ${sh.title}`, color: COL.title, size: PHEAD },
       // D2: Beginner sees the everyday comparison (maths on request); Curious words + numbers; Engineer the formula
       ...byLevel<Line[]>(
-        [{ s: sh.think, color: COL.explain }, ...(this.showMath ? [{ s: sh.formula, color: COL.body }] : [])],
-        [{ s: sh.formula, color: COL.body }, ...(this.shown <= 1 ? [{ s: sh.think, color: COL.explain }] : [])],
+        [{ s: sh.think, color: COL.explain, think: true }, ...(this.showMath ? [{ s: sh.formula, color: COL.body }] : [])],
+        [{ s: sh.formula, color: COL.body }, ...(this.shown <= 1 ? [{ s: sh.think, color: COL.explain, think: true }] : [])],
         [{ s: sh.formulaEngineer ?? sh.formula, color: COL.body }],
       ),
       // while an addition waits, its cyan lines carry the numbers: the build lines step aside
@@ -293,17 +294,20 @@ export class DeskScene extends Phaser.Scene {
     });
     const done = this.shown > sh.steps.length;
     const vd = done ? sh.verdict() : null;
-    if (vd) blocks.push([{ s: `${vd.pass ? '✓' : '×'} ${vd.text}`, color: vd.pass ? COL.pass : COL.fail, size: PVERDICT }, ...(this.easy && vd.pointer ? [{ s: `Change: ${vd.pointer}`, color: COL.explain, dx: 8 }] : []), ...(sh.extra ?? []).map((e) => ({ s: e, color: e.startsWith('×') ? COL.fail : COL.explain, dx: 8 }))]);
+    // the verdict word alone in colour on its own line, the reason in charcoal under it
+    const vWord = vd ? (vd.pass ? 'PASS' : 'FAIL') : '';
+    const vRest = vd ? vd.text.replace(/^(PASS|FAIL)[:,]?\s*/, '').replace(/^with a warning:\s*/, 'Warning: ') : '';
+    if (vd) blocks.push([{ s: `${vd.pass ? '✓' : '×'} ${vWord}`, color: vd.pass ? COL.verdictPass : COL.verdictFail, size: PVERDICT }, ...(vRest ? [{ s: vRest.charAt(0).toUpperCase() + vRest.slice(1), color: COL.body }] : []), ...(this.easy && vd.pointer ? [{ s: `Change: ${vd.pointer}`, color: COL.explain, dx: 8 }] : []), ...(sh.extra ?? []).map((e) => ({ s: e, color: e.startsWith('×') ? COL.fail : COL.explain, dx: 8 }))]);
     // fit without shrinking: the oldest steps scroll off the top, then the "think" line goes
     const hOf = (ls: Line[]) => ls.reduce((a, l) => a + (l.size ? this.heightOf(l.s, PW - (l.dx ?? 0), l.size) + 4 : Math.ceil((this.heightOf(l.s, PW - (l.dx ?? 0), PBODY) + 2) / RULE) * RULE), 0);
     let hdr = header;
-    const room = () => PBOTTOM - PTOP - hOf(hdr) - 22;
+    const room = () => PBOTTOM - PTOP - hOf(hdr) - 22 - RULE * 2; // the earlier-steps note and ruled-line snapping
     let first = 0;
     while (first < blocks.length - 1 && blocks.slice(first).reduce((a, bl) => a + hOf(bl), 0) > room()) first++;
-    if (blocks.slice(first).reduce((a, bl) => a + hOf(bl), 0) > room()) hdr = header.filter((l) => l.color !== COL.explain);
+    if (blocks.slice(first).reduce((a, bl) => a + hOf(bl), 0) > room()) hdr = header.filter((l) => !l.think); // the everyday comparison goes first when space is tight
     let y = PTOP;
     let lastY = PTOP;
-    const put = (l: Line) => { if (!l.s || y > PBOTTOM - 14) return; if (!l.size) y = Math.ceil(y / RULE) * RULE; if (y + (l.size ? this.heightOf(l.s, PW - (l.dx ?? 0), l.size) : 11) > PBOTTOM) return; const o = this.t(PX + (l.dx ?? 0), y, l.s, l.color, l.size ?? PBODY, PW - (l.dx ?? 0)); this.paper.add(o); underlineTerms(this, o, this.paper, COL.build); lastY = y; y += l.size ? o.height + 4 : Math.ceil((o.height + 2) / RULE) * RULE; };
+    const put = (l: Line) => { if (!l.s || y > PBOTTOM - 14) return; if (!l.size) y = Math.ceil(y / RULE) * RULE; if (y + this.heightOf(l.s, PW - (l.dx ?? 0), l.size ?? PBODY) > PBOTTOM) return; const o = this.t(PX + (l.dx ?? 0), y, l.s, l.color, l.size ?? PBODY, PW - (l.dx ?? 0)); this.paper.add(o); underlineTerms(this, o, this.paper, COL.build); lastY = y; y += l.size ? o.height + 4 : Math.ceil((o.height + 2) / RULE) * RULE; };
     hdr.forEach(put);
     y += 4;
     if (first > 0) put({ s: `(${first} earlier step${first > 1 ? 's' : ''} above)`, color: COL.explain });

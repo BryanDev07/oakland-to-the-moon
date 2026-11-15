@@ -303,4 +303,69 @@ test.describe('Oakland to the Moon', () => {
     for (let i = 0; i < 4; i++) { await check(); await page.waitForTimeout(500); }
     expect(found).toEqual([]);
   });
+
+  test('ISS mission: launch, catch up, dock, spacewalk, home; never the Moon scenes', async ({ page }) => {
+    test.setTimeout(8 * 60 * 1000);
+    type O = { __ottm: { sceneLog: string[]; debug: { useReferenceDesign(): void; forceSeed(n: number): void }; store: { markSeen(k: string): void; mission: { iss?: { docked: boolean; panelFixed: boolean } } | null; history: { outcome: string }[] }; goto(k: string): void; game: { scene: { getScene(k: string): { speed?: number; setSpeed?(n: number): void; sys: { isActive(): boolean } } } } } };
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto('/');
+    await waitScene(page, 'Title');
+    await page.evaluate(() => { const o = (window as unknown as O).__ottm; o.debug.useReferenceDesign(); for (let i = 1; i < 9; i++) o.store.markSeen('chap' + i); o.store.markSeen('reviewCard'); o.goto('RoleSelect'); });
+    await waitScene(page, 'RoleSelect');
+    await page.keyboard.press('Enter'); // Mission Commander, Easy
+    await waitScene(page, 'MissionSelect');
+    await page.keyboard.press('2'); // ISS Rescue: Dock & Spacewalk
+    await page.keyboard.press('Enter');
+    await waitScene(page, 'Hangar');
+    await page.waitForTimeout(800);
+    await click(page, 455, 227); // HINT: load the reference design (keeps the ISS mission)
+    await page.waitForTimeout(300);
+    await page.keyboard.press('2');
+    await page.waitForTimeout(400);
+    // keyboard: Down twice to the Capsule tab, Right to switch Apollo -> Budget LEO capsule
+    await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => (window as unknown as O).__ottm.debug.forceSeed(221));
+    await page.keyboard.press('Enter');
+    // role cards on the way: '2' keeps the money on parts
+    for (let i = 0; i < 30 && !(await hooks(page)).includes('Desk'); i++) { if (await emergencyOpen(page)) await page.keyboard.press('2'); await page.waitForTimeout(200); }
+    await waitScene(page, 'Desk');
+    for (let i = 0; i < 8; i++) { await page.keyboard.press('s'); await page.waitForTimeout(120); }
+    for (let i = 0; i < 12 && !(await hooks(page)).includes('Review'); i++) { if (await emergencyOpen(page)) await page.keyboard.press('1'); else await page.keyboard.press('Enter'); await page.waitForTimeout(400); }
+    await waitScene(page, 'Review');
+    await page.keyboard.press('Enter'); // launch poll
+    await waitSceneClearing(page, 'Launch', 20000);
+    // through launch and the 1-day phasing coast, answering cards, fast-forwarding
+    const end = Date.now() + 4 * 60 * 1000;
+    while (!(await hooks(page)).includes('Docking')) {
+      if (Date.now() > end) throw new Error(`never reached Docking (at ${(await hooks(page)).join(',')})`);
+      if (await emergencyOpen(page)) await answerKey(page);
+      else await page.evaluate(() => { const sc = (window as unknown as O).__ottm.game.scene.getScene('Ops'); if (sc?.sys.isActive() && sc.speed !== 3) sc.setSpeed!(3); });
+      if ((await hooks(page)).includes('Report')) throw new Error('mission ended before docking');
+      await page.waitForTimeout(400);
+    }
+    await waitScene(page, 'Docking');
+    await page.keyboard.press('a'); await page.keyboard.press('4'); // autopilot at 4x
+    await waitSceneClearing(page, 'Spacewalk', 120000);
+    await page.waitForTimeout(800);
+    // prep: Enter goes outside; outside: Enter = careful moves and the tasks
+    const end2 = Date.now() + 2 * 60 * 1000;
+    while ((await hooks(page)).includes('Spacewalk')) {
+      if (Date.now() > end2) throw new Error('spacewalk never finished');
+      if (await emergencyOpen(page)) await answerKey(page); else await page.keyboard.press('Enter');
+      await page.waitForTimeout(250);
+    }
+    for (let i = 0; i < 80 && !(await hooks(page)).includes('Report'); i++) { await page.keyboard.press('Enter'); await page.waitForTimeout(400); }
+    await waitScene(page, 'Report');
+    const info = await page.evaluate(() => { const o = (window as unknown as O).__ottm; return { log: o.sceneLog, iss: o.store.mission?.iss, outcome: o.store.history[0]?.outcome }; });
+    console.log('iss run', JSON.stringify(info));
+    expect(info.log).not.toContain('Landing');
+    expect(info.log).not.toContain('Surface');
+    expect(info.log).toEqual(expect.arrayContaining(['Docking', 'Spacewalk']));
+    expect(info.iss?.docked).toBe(true);
+    expect(info.outcome).toMatch(/^ISS: /);
+    expect(errors).toEqual([]);
+  });
 });

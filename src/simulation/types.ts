@@ -20,6 +20,8 @@ export interface PendingEvent {
   options: { label: string; detail: string; good?: string; bad?: string }[];
   // emergency deck (JOSEPH_SPEC tab 7)
   stage?: string; real?: string; scenario?: boolean; hint?: string; fdPick?: number;
+  /** Card tag line override, e.g. "Scenario based on a real event" (ISS deck). */
+  tag?: string;
 }
 
 export interface MissionState {
@@ -82,4 +84,6 @@ export interface MissionState {
   crewLost: boolean;
   lossCause: string | null;
   log: LogEntry[];
+  /** ISS mission progress (docking, spacewalk); absent on the Moon mission. */
+  iss?: import('./issDeck').IssProgress;
 }

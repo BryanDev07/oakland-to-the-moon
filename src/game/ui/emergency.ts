@@ -43,7 +43,7 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
   const line = (s2: string, color: number, dy = 2) => { const t = txt(scene, x, y, s2, { color, size: BODY, maxWidth: w }); c.add(t); y += t.height + dy; return t; };
   c.add(txt(scene, W / 2, y, ev.title, { align: 'center', color: C.gold2, size: BODY, maxWidth: w })); y += 18;
   // spec tab 8: cards 3, 6, 9, 10, 14, 15 are scenarios; card 13 is a real effect (contact lost behind the Moon)
-  if (ev.stage) line(`${ev.stage}  ·  ${ev.real ? 'This really happened' : ev.scenario ? 'Scenario (made up, realistic)' : 'Real effect'}`, COL.tag);
+  if (ev.stage) line(`${ev.stage}  ·  ${ev.tag ?? (ev.real ? 'This really happened' : ev.scenario ? 'Scenario (made up, realistic)' : 'Real effect')}`, COL.tag);
   const realLine = ev.real ? realEventLine(ev.id) : null; // A6: the real event in one line, with its source
   if (realLine) line(realLine, COL.tag);
   const body = line(ev.text, COL.text, 3);
@@ -95,7 +95,7 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
     store.saveMission();
     if (ev!.fdPick === undefined) { done(); return; } // legacy event: the caller shows its own toast
     // Mission Control's answer in a paged dialogue box at the edge away from the action (A1)
-    const top = ['Launch', 'Landing', 'Surface'].includes(scene.scene.key);
+    const top = ['Launch', 'Landing', 'Surface', 'Ops', 'Docking', 'Spacewalk'].includes(scene.scene.key); // clear of meters and time buttons
     const dlg = new Dialogue(scene, top ? 'top' : 'bottom');
     pinToScreen(dlg);
     dlg.setDepth(950);

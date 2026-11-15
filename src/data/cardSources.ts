@@ -14,6 +14,11 @@ export const CARD_SOURCES: Record<string, CardSource> = {
   card11: { event: 'Soyuz MS-09 leak, ISS, 2018', source: 'NBC News', url: 'https://www.nbcnews.com/mach/science/astronauts-use-gauze-high-tech-tape-plug-hole-iss-ncna905326' },
   card12: { event: 'Starliner thrusters failed near the ISS, 2024', source: 'Space.com', url: 'https://www.space.com/nasa-boeing-starliner-astronauts-will-return-on-spacex-dragon-2025' },
   card16: { event: 'Hydrogen leak scrubbed Artemis I, 2022', source: 'Space.com', url: 'https://www.space.com/artemis-1-launch-scrub-hydrogen-leak' },
+  // ISS mission deck (links verified by Joseph)
+  iss12: { event: 'Starliner thrusters failed near the ISS, 2024', source: 'Space.com', url: 'https://www.space.com/nasa-boeing-starliner-astronauts-will-return-on-spacex-dragon-2025' },
+  issHelmet: { event: 'Water leaked into Luca Parmitano\'s helmet on a spacewalk, 2013', source: 'Space.com', url: 'https://space.com/21988-spacewalk-dangers-spacesuit-water-leak.html' },
+  issToolbag: { event: 'Tool bag lost on a spacewalk, STS-126, 2008', source: 'Space.com', url: 'https://www.space.com/6131-astronaut-laments-lost-spacewalk-tool-bag.html' },
+  issArray: { event: 'Torn ISS solar array repaired on a spacewalk, STS-120, 2007', source: 'ESA', url: 'https://www.esa.int/ESA_Multimedia/Images/2007/11/Spacewalk_to_repair_the_Station_s_torn_solar_array' },
 };
 /** "Real event: Soyuz MS-09 leak, ISS, 2018 (NBC News)" */
 export const realEventLine = (id: string): string | null => { const c = CARD_SOURCES[id]; return c ? `Real event: ${c.event} (${c.source})` : null; };

@@ -38,6 +38,7 @@ export class LandingScene extends Phaser.Scene {
   constructor() { super('Landing'); }
 
   create() {
+    if (store.mission?.iss) { fadeTo(this, 'Report'); return; } // safety net: the ISS mission never lands on the Moon
     fadeIn(this);
     const s = store.mission;
     if (!s || s.phase !== 'DESCENT') { fadeTo(this, s ? 'Ops' : 'Title'); return; }

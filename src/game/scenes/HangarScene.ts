@@ -11,11 +11,12 @@ import { analyzeDesign, DesignStats } from '../../simulation/spacecraft';
 import { BUDGET_M, G0, SPEC_MODEL } from '../../simulation/constants';
 import { CAPSULE_OWNED_SLOTS, missionDv, specOf } from '../../simulation/specModel';
 import { CAPSULES, ORBITS, OrbitId, SpecDesign } from '../../data/specParts';
-import { ARCH_RUNDOWN, CAPSULE_RUNDOWN, ORBIT_RUNDOWN, STYLE_RUNDOWN } from '../../data/missionStyle';
+import { ARCH_RUNDOWN, CAPSULE_RUNDOWN, ISS_CAPSULE_RUNDOWN, ORBIT_RUNDOWN, STYLE_RUNDOWN } from '../../data/missionStyle';
 import { fmt, fmtUsd, fmtUsdM, kgToLb } from '../../simulation/units';
 import { renderRocketTab } from './hangarRocket';
 import { applyDesignPick, dueDesignCard } from '../../simulation/roleDecisions';
 import { showRoleCard } from '../ui/roleCard';
+import { missionOf } from '../../data/missionConfig';
 
 type Cat = SlotId | 'plan' | 'style' | 'rocket';
 const FLOOR_Y = 209;
@@ -61,6 +62,11 @@ export class HangarScene extends Phaser.Scene {
     panel(this, 2, 2, 104, 210, 'panel');
     txt(this, 54, 7, 'SYSTEMS', { align: 'center', color: C.gold });
     const cats: { id: Cat; label: string; icon: string }[] = [{ id: 'plan', label: 'Mission Plan', icon: 'rocket' }, ...(SPEC_MODEL ? [{ id: 'rocket' as Cat, label: 'Rocket', icon: 'engine' }, { id: 'style' as Cat, label: 'Mission Style', icon: 'earth' }] : []), ...SLOTS.filter((s) => !(SPEC_MODEL && CAPSULE_OWNED_SLOTS.includes(s.id))).map((s) => ({ id: s.id as Cat, label: s.label, icon: s.icon }))];
+    // ISS mission (missionOf): no Lunar Lander, Mission Style or surface Science tabs
+    if (missionOf(this.design) === 'iss') {
+      for (let i = cats.length - 1; i >= 0; i--) if (['lander', 'science'].includes(cats[i].id)) cats.splice(i, 1);
+      const st = cats.find((c) => c.id === 'style'); if (st) st.label = 'Capsule'; // ISS version of Mission Style: the capsule only
+    }
     cats.forEach((c, i) => {
       const y = 19 + i * 13.6;
       const bg = this.add.rectangle(6, y, 96, 13, 0x2a4c98, 0).setOrigin(0, 0).setInteractive({ useHandCursor: true });
@@ -86,7 +92,7 @@ export class HangarScene extends Phaser.Scene {
     this.meters.lander = new Meter(this, 218, 243, 98, 'LANDER', 'moon');
     for (const [k, m] of Object.entries(this.meters)) {
       const tips: Record<string, string> = {
-        mass: 'Total mass sent to the Moon vs. what your rocket can lift (white line = limit).',
+        mass: 'Total mass your rocket must push vs. what it can lift (white line = limit).',
         budget: `Total cost vs. the $${BUDGET_M}M program budget.`,
         dv: 'Service-module propellant: how much the planned burns need vs. what the tanks hold.',
         power: 'Orbit-average solar/fuel-cell power vs. electrical load with all instruments on.',
@@ -111,7 +117,7 @@ export class HangarScene extends Phaser.Scene {
       const i = cats.indexOf(this.cat);
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         const d = e.key === 'ArrowDown' ? 1 : -1;
-        if (this.cat === 'style' && this.styleRow + d >= 0 && this.styleRow + d <= 2) { this.styleRow += d; audio.sfx('move'); this.renderRight(); return; }
+        if (this.cat === 'style' && this.styleRow + d >= 0 && this.styleRow + d <= (missionOf(this.design) === 'iss' ? 0 : 2)) { this.styleRow += d; audio.sfx('move'); this.renderRight(); return; }
         const next = cats[(i + d + cats.length) % cats.length];
         if (next === 'style') this.styleRow = d > 0 ? 0 : 2;
         audio.sfx('move'); this.selectCat(next);
@@ -125,7 +131,7 @@ export class HangarScene extends Phaser.Scene {
     this.refresh();
     if (data?.tutorial && !store.seen.hangarTut) {
       chapterCard(this, 2, 'THE BUILD', () => {
-        toast(this, 'Director Cole', 'This baseline design will NOT reach the Moon and back. Red icons show the problems. Fix them, then press REVIEW.', 'portrait_director', 7000);
+        toast(this, 'Director Cole', missionOf(this.design) === 'iss' ? 'Build a lean ship for the ISS: a small rocket and a cheap Earth-orbit capsule are enough. Red icons show problems.' : 'This baseline design will NOT reach the Moon and back. Red icons show the problems. Fix them, then press REVIEW.', 'portrait_director', 7000);
         store.markSeen('hangarTut');
       });
     }
@@ -133,6 +139,7 @@ export class HangarScene extends Phaser.Scene {
   }
 
   placeLander() {
+    this.view.landerC.setVisible(missionOf(this.design) !== 'iss'); // no lander on the ISS mission
     const lander = this.design.slots.lander;
     const lh = lander === 'lander_path' ? 62 : 50;
     this.view.landerC.setPosition(62, FLOOR_Y - this.view.y - lh + 1);
@@ -384,20 +391,21 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
         R.add(b);
       });
     };
-    row(19, 'LAUNCH VEHICLE', LAUNCH_VEHICLES.map((v) => ({ id: v.id, label: v.short.split(' ')[0].toUpperCase().slice(0, 7), tip: SPEC_MODEL ? `${v.name}: ${fmt(kgToLb(v.tliCapacityKg))} lb to the Moon (12,600 m/s), rocket ${fmtUsdM(v.costM)}.\n${v.desc}\n${v.learn}` : `${v.name}: ${(v.tliCapacityKg / 1000).toFixed(1)} t to TLI, $${v.costM}M, ${(v.reliability * 100).toFixed(1)}% reliable.\n${v.desc}\n${v.learn}` })), p.lv, (v) => { this.design.plan.lv = v as Design['plan']['lv']; if (this.design.spec) this.design.spec.rocket = null; });
-    row(46, 'LANDING SITE', SITES.map((s) => ({ id: s.id, label: s.short.split(' ')[0].toUpperCase().slice(0, 7), tip: `${s.name}: ${SPEC_MODEL ? `LOI ${missionDv(this.design).loi} m/s, TEI ${missionDv(this.design).tei} m/s, descent ${missionDv(this.design).descent} m/s (set by the lunar orbit)` : `LOI ${s.dvLoi} m/s, TEI ${s.dvTei} m/s, descent ${s.dvDescent} m/s`}. Science x${s.scienceMult}.\n${s.desc}\n${s.learn}` })), p.site, (v) => { this.design.plan.site = v as Design['plan']['site']; });
+    row(19, 'LAUNCH VEHICLE', LAUNCH_VEHICLES.map((v) => ({ id: v.id, label: v.short.split(' ')[0].toUpperCase().slice(0, 7), tip: SPEC_MODEL ? (missionOf(this.design) === 'iss' ? `${v.name}: rocket ${fmtUsdM(v.costM)}. The ISS needs 9,400 m/s; a smaller rocket saves money.` : `${v.name}: ${fmt(kgToLb(v.tliCapacityKg))} lb to the Moon (12,600 m/s), rocket ${fmtUsdM(v.costM)}.\n${v.desc}\n${v.learn}`) : `${v.name}: ${(v.tliCapacityKg / 1000).toFixed(1)} t to TLI, $${v.costM}M, ${(v.reliability * 100).toFixed(1)}% reliable.\n${v.desc}\n${v.learn}` })), p.lv, (v) => { this.design.plan.lv = v as Design['plan']['lv']; if (this.design.spec) this.design.spec.rocket = null; });
+    if (missionOf(this.design) !== 'iss') row(46, 'LANDING SITE', SITES.map((s) => ({ id: s.id, label: s.short.split(' ')[0].toUpperCase().slice(0, 7), tip: `${s.name}: ${SPEC_MODEL ? `LOI ${missionDv(this.design).loi} m/s, TEI ${missionDv(this.design).tei} m/s, descent ${missionDv(this.design).descent} m/s (set by the lunar orbit)` : `LOI ${s.dvLoi} m/s, TEI ${s.dvTei} m/s, descent ${s.dvDescent} m/s`}. Science x${s.scienceMult}.\n${s.desc}\n${s.learn}` })), p.site, (v) => { this.design.plan.site = v as Design['plan']['site']; });
     row(73, 'CREW SIZE', [{ id: 3, label: '3 CREW', tip: '3 crew: 2 land, 1 stays in orbit (Apollo style). Fewer consumables.' }, { id: 4, label: '4 CREW', tip: '4 crew: up to 3 land with the Pathfinder lander. More EVA hours, more consumables and mass.' }], p.crew, (v) => { this.design.plan.crew = v as 3 | 4; });
-    row(100, 'SURFACE STAY', [1, 2, 3].map((d) => ({ id: d, label: `${d} DAY${d > 1 ? 'S' : ''}`, tip: `${d} day(s) on the surface. Longer stays allow more EVAs but need lander battery & consumables (and crew food/water in orbit).` })), p.stayDays, (v) => { this.design.plan.stayDays = v as 1 | 2 | 3; });
+    if (missionOf(this.design) !== 'iss') row(100, 'SURFACE STAY', [1, 2, 3].map((d) => ({ id: d, label: `${d} DAY${d > 1 ? 'S' : ''}`, tip: `${d} day(s) on the surface. Longer stays allow more EVAs but need lander battery & consumables (and crew food/water in orbit).` })), p.stayDays, (v) => { this.design.plan.stayDays = v as 1 | 2 | 3; });
     row(127, 'OPS TEMPO', TEMPOS.map((t) => ({ id: t.id, label: t.name.slice(0, 7).toUpperCase(), tip: `${t.name}: ${t.desc}` })), p.tempo, (v) => { this.design.plan.tempo = v as Design['plan']['tempo']; });
     const lv = LV_BY_ID[p.lv], site = SITE_BY_ID[p.site];
-    this.planDetail(`${lv.name}${specOf(this.design).rocket ? ' (fuel set at the Calculation Desk)' : ''} → ${site.name}. ${site.desc}`);
+    this.planDetail(missionOf(this.design) === 'iss' ? `${lv.name} to the ISS, about 250 miles up: the rocket must reach 9,400 m/s.` : `${lv.name}${specOf(this.design).rocket ? ' (fuel set at the Calculation Desk)' : ''} → ${site.name}. ${site.desc}`);
   }
 
   /** Mission Style (spec tab 2 'the big choice'): capsule, lunar orbit, architecture. */
   renderStyle() {
     const R = this.right, x0 = 326;
     const sp = specOf(this.design);
-    R.add(txt(this, 400, 7, 'MISSION STYLE', { align: 'center', color: C.gold }));
+    const issMode = missionOf(this.design) === 'iss';
+    R.add(txt(this, 400, 7, issMode ? 'CAPSULE' : 'MISSION STYLE', { align: 'center', color: C.gold }));
     const row = (y: number, label: string, rundown: string, items: { id: string; label: string; tip: string }[], cur: string, set: (v: string) => void) => {
       const focus = ['CAPSULE', 'LUNAR ORBIT', 'ARCHITECTURE'].indexOf(label) === this.styleRow;
       const l = txt(this, x0 + 2, y, `${focus ? '> ' : ''}${label}`, { color: focus ? C.gold2 : C.dim });
@@ -416,7 +424,8 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
     };
     const setSpec = (patch: Partial<SpecDesign>) => { this.design.spec = { ...specOf(this.design), ...patch }; };
     row(18, 'CAPSULE', STYLE_RUNDOWN.capsule, CAPSULES.map((c) => ({ id: c.id, label: c.id === 'cap_orion' ? 'ORION' : c.id === 'cap_apollo' ? 'APOLLO' : 'BUDGET',
-      tip: `${CAPSULE_RUNDOWN[c.id]} ${c.crew.v} crew, ${c.maxDays.v} days, ${fmt(c.smFuelLb.v)} lb fuel, ${fmt(c.veMs.v)} m/s, shield ${fmt(c.shieldMph.v)} mph, ${fmtUsd(c.priceUsd.v)}.` })), sp.capsule, (v) => setSpec({ capsule: v }));
+      tip: `${(issMode ? ISS_CAPSULE_RUNDOWN : CAPSULE_RUNDOWN)[c.id]} ${c.crew.v} crew, ${c.maxDays.v} days, ${fmt(c.smFuelLb.v)} lb fuel, ${fmt(c.veMs.v)} m/s, shield ${fmt(c.shieldMph.v)} mph, ${fmtUsd(c.priceUsd.v)}.` })), sp.capsule, (v) => setSpec({ capsule: v }));
+    if (issMode) { this.renderIssCapsule(); return; }
     row(42, 'LUNAR ORBIT', STYLE_RUNDOWN.orbit, (['LLO', 'NRHO'] as OrbitId[]).map((o) => ({ id: o, label: o === 'LLO' ? 'LOW' : 'HALO',
       tip: `${ORBIT_RUNDOWN[o]} In ${ORBITS[o].loi.v} / home ${ORBITS[o].tei.v} / down ${fmt(ORBITS[o].down.v)} / up ${fmt(ORBITS[o].up.v)} m/s.` })), sp.orbit, (v) => setSpec({ orbit: v as OrbitId }));
     row(66, 'ARCHITECTURE', STYLE_RUNDOWN.architecture, [{ id: 'apollo', label: 'APOLLO (1)', tip: ARCH_RUNDOWN.apollo }, { id: 'artemis', label: 'ARTEMIS (2)', tip: ARCH_RUNDOWN.artemis }], sp.architecture, (v) => setSpec({ architecture: v as 'apollo' | 'artemis' }));
@@ -434,6 +443,18 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
     R.add(t);
     this.planDetail(STYLE_RUNDOWN.capsule);
   }
+  /** ISS version of Mission Style: capsule numbers that matter in low orbit (shield vs 17,500 mph, cost). */
+  renderIssCapsule() {
+    const S = this.review.stats.spec!;
+    const ok = (b: boolean) => (b ? '✓' : '×');
+    const t = txt(this, 328, 40, [
+      `${ok(S.shieldHealth >= 0.9)} Shield ${Math.round(S.shieldHealth * 100)}% of 17,500 mph`,
+      `${ok(S.capsuleReturn.pass)} Home burn ${fmt(S.capsuleReturn.dvLeft)}/${fmt(S.capsuleReturn.need)} m/s`,
+      `${S.capsule.crew} seats, ${S.capsule.maxDays} days`,
+    ].join('\n'), { maxWidth: 144, color: C.text });
+    this.right.add(t);
+    this.planDetail(ISS_CAPSULE_RUNDOWN[specOf(this.design).capsule] ?? STYLE_RUNDOWN.capsule);
+  }
   planDetail(text: string) {
     this.detail.removeAll(true);
     this.detail.add(this.add.rectangle(326, 155, 148, 1, C.gold, 0.6).setOrigin(0, 0));
@@ -449,7 +470,7 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
     modal(this, {
       title: fails.length ? `${fails.length} BLOCKING ISSUE${fails.length > 1 ? 'S' : ''}` : 'ENGINEERING HINT', text,
       options: [{ label: 'Keep building' }, { label: 'Load a proven reference design', detail: 'A known-good starting point you can modify.' }],
-      onChoose: (i) => { if (i === 1) this.change((d) => { const r = cloneDesign(REFERENCE_DESIGN); d.slots = r.slots; d.safety = r.safety; d.science = r.science; d.plan = r.plan; d.spec = { ...r.spec, role: d.spec?.role ?? null, difficulty: d.spec?.difficulty ?? 'easy' }; }, 'capsule'); },
+      onChoose: (i) => { if (i === 1) this.change((d) => { const r = cloneDesign(REFERENCE_DESIGN); d.slots = r.slots; d.safety = r.safety; d.science = r.science; d.plan = r.plan; d.spec = { ...r.spec, role: d.spec?.role ?? null, difficulty: d.spec?.difficulty ?? 'easy', mission: d.spec?.mission }; }, 'capsule'); },
     });
   }
 

@@ -7,6 +7,7 @@ import * as Sim from '../../simulation/mission';
 import type { Stage } from '../../simulation/deck';
 import { showEmergency } from '../ui/emergency';
 import { SpacecraftView } from '../components/SpacecraftView';
+import { missionOf } from '../../data/missionConfig';
 
 const SKY_H = 810, GROUND = 792;
 
@@ -187,7 +188,8 @@ export class LaunchScene extends Phaser.Scene {
     const earth = this.add.image(-30, 120, 'earth_big').setOrigin(0, 0);
     this.tweens.add({ targets: earth, x: -60, y: 150, duration: 6000 });
     const m = store.mission!;
-    const sc = new SpacecraftView(this, 300, 110, m.design, 'flight');
+    const iss = missionOf(m.design) === 'iss'; // E3: the ISS mission stops in low Earth orbit
+    const sc = new SpacecraftView(this, 300, 110, m.design, iss ? 'csm' : 'flight');
     // A8: the rocket's upper stage does this burn, so draw it docked behind the spacecraft and put the
     // flame at ITS nozzle (the capsule's own engine stays dark)
     const us = this.add.graphics({ x: 194, y: 110 }); // right edge meets the capsule's nozzle
@@ -202,8 +204,8 @@ export class LaunchScene extends Phaser.Scene {
     this.tweens.add({ targets: [sc, us, flame], x: '+=40', duration: 6000 });
     audio.loop('rumble', 0.3);
     panel(this, 100, 196, 280, 50, 'dialog');
-    txt(this, 240, 202, 'TRANS-LUNAR INJECTION', { align: 'center', color: C.gold2 });
-    txt(this, 240, 214, m.flags.tliTrimDv > 0
+    txt(this, 240, 202, iss ? 'ORBIT INSERTION' : 'TRANS-LUNAR INJECTION', { align: 'center', color: C.gold2 });
+    txt(this, 240, 214, iss ? 'Upper stage burn complete: low Earth orbit, about 250 miles up. Catching up to the ISS.' : m.flags.tliTrimDv > 0
       ? `Upper stage cut off early (${m.flags.tliTrimDv} m/s short). The service module made up the difference using propellant.`
       : 'Upper stage burn complete. TOWN-1 is on a three-day coast to the Moon.', { align: 'center', maxWidth: 260, color: m.flags.tliTrimDv > 0 ? C.orange : C.white });
     if (m.flags.tliTrimDv > 0) audio.sfx('warn');

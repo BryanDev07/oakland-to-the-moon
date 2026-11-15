@@ -15,6 +15,8 @@ import { shieldHealth, shieldResult } from './formulas';
 import { fmt, fmtLb } from './units';
 import type { DataSource, LogEntry, MissionState, Phase } from './types';
 import { applyRoleAtLaunch } from './roleDecisions';
+import { ISS, isIss, missionCfg } from '../data/missionConfig';
+import { newIssProgress } from './issDeck';
 
 export type { MissionState, Phase } from './types';
 
@@ -57,6 +59,7 @@ export function createMission(design: Design, seed: number): MissionState {
   s.em = newEmergencyState(stats.spec?.rocket.spare ?? 0);
   s.schedule = K.SPEC_MODEL ? scheduleDeck(s, rng) : scheduleEvents(s, rng);
   if (K.SPEC_MODEL) applyRoleAtLaunch(s); // D3: the player's design-time role decisions
+  if (isIss(d)) s.iss = newIssProgress(); // E3: docking and spacewalk progress
   // Launch vehicle performance: chance of an upper-stage shortfall scales with LV unreliability.
   // Reliability rolls are OFF in the spec model (RELIABILITY_ROLLS): risk comes only from emergencies.
   const lv = LV_BY_ID[d.plan.lv];
@@ -74,7 +77,7 @@ export function createMission(design: Design, seed: number): MissionState {
     log(s, `The lander launched separately and braked into the halo orbit on its own (${fmt(dv0.landerArrival)} m/s). It is waiting for you there.`, 'info');
   }
   s.rngState = rng.state;
-  log(s, 'Trans-lunar injection complete. TOWN-1 is on its way to the Moon!', 'good');
+  log(s, isIss(d) ? 'In low Earth orbit. Catching up to the ISS.' : 'Trans-lunar injection complete. TOWN-1 is on its way to the Moon!', 'good');
   if (lander && K.SPEC_MODEL && specOf(d).architecture === 'apollo') dock(s, 'Transposition: the capsule turned around and docked with the lander');
   return s;
 }
@@ -120,6 +123,12 @@ export function projectBurns(s: MissionState): { name: string; dv: number; propK
   const lc = s.stats.landingCrew * K.CREW_MASS_KG;
   const samples = s.stats.lander.sampleCapacityKg;
   const landing = s.landerAttached;
+  if (isIss(s.design)) { // ISS: phasing burns and the de-orbit burn home
+    m = totalMass(s);
+    if (s.phase === 'TRANSIT_OUT' || s.phase === 'LOI_PENDING') burnP('Phasing burns', ISS.phasingDv.v);
+    if (s.phase !== 'ENTRY' && s.phase !== 'COMPLETE') burnP('De-orbit burn', ISS.deorbitDv.v);
+    return out;
+  }
   switch (s.phase) {
     case 'TRANSIT_OUT': case 'LOI_PENDING':
       m = totalMass(s);
@@ -295,7 +304,7 @@ export function step(s: MissionState, dt = K.SIM_DT, allowEvents = true) {
   }
 
   // --- phase timing
-  if (s.phase === 'TRANSIT_OUT' && phaseTime(s) >= K.TRANSIT_OUT_S) {
+  if (s.phase === 'TRANSIT_OUT' && phaseTime(s) >= (isIss(s.design) ? ISS.phasingDays.v * K.DAY : K.TRANSIT_OUT_S)) { // ISS: 1 day of phasing
     setPhase(s, 'LOI_PENDING');
     log(s, 'Approaching the Moon. Lunar orbit insertion burn is ready.', 'info');
   } else if ((s.phase === 'TRANSIT_BACK' && phaseTime(s) >= K.TRANSIT_BACK_S) || (s.phase === 'FREE_RETURN' && phaseTime(s) >= K.FREE_RETURN_S)) {
@@ -547,11 +556,12 @@ export function performEntry(s: MissionState) {
   if (K.SPEC_MODEL && s.stats.spec) {
     // health = rating / 24,400 mph (max 100%) − damage; earlier anomalies count as damage (G)
     const mph = s.stats.spec.capsule.shieldMph;
-    const health = shieldHealth(mph, Math.max(0, s.entryDispersion - 1) + (s.em?.shieldDamage ?? 0)); // + emergency damage (card 14)
+    const need = missionCfg(s.design).reentryMph.v; // 24,400 mph from the Moon, 17,500 from the ISS
+    const health = shieldHealth(mph, Math.max(0, s.entryDispersion - 1) + (s.em?.shieldDamage ?? 0), need); // + emergency damage (card 14)
     const res = shieldResult(health);
     s.flags.entryHealth = health;
     s.flags.entryOk = res !== 'burnthrough';
-    if (res === 'burnthrough') { loseCrew(s, `Heat shield burn-through: health ${Math.round(health * 100)}% at re-entry (rated ${fmt(mph)} mph; the Moon return needs 24,400 mph).`); return { ok: false, margin: health, load: 0.9 }; }
+    if (res === 'burnthrough') { loseCrew(s, `Heat shield burn-through: health ${Math.round(health * 100)}% at re-entry (rated ${fmt(mph)} mph; coming home needs ${fmt(need)} mph).`); return { ok: false, margin: health, load: 0.9 }; }
     if (res === 'rough') log(s, `Rough ride: heat shield at ${Math.round(health * 100)}%. The crew is shaken but safe (-10 crew safety).`, 'warn');
     setPhase(s, 'COMPLETE');
     log(s, 'Splashdown in the Pacific! Recovery ship on station. Welcome home!', 'good');
@@ -572,3 +582,11 @@ export function securedMB(s: MissionState, src: DataSource) {
   return s.downMB[src] + (s.crewLost ? 0 : s.storedMB[src]);
 }
 export { SOURCES };
+
+/** E3: the ISS mission after the spacewalk: undock and head for re-entry (the shared ReturnScene). */
+export function issUndock(s: MissionState) {
+  if (s.phase === 'COMPLETE' || s.crewLost) return;
+  s.flags.minPropMarginKg = Math.min(s.flags.minPropMarginKg, s.propKg);
+  setPhase(s, 'ENTRY');
+  log(s, 'Undocked from the ISS. De-orbit burn: heading home.', 'good');
+}

@@ -6,7 +6,7 @@
 import Phaser from 'phaser';
 import { store } from '../../state/store';
 import { audio } from '../audio/audio';
-import { Button, C, pagedText, toast, Tooltip, txt } from '../ui/ui';
+import { Button, C, notice, pagedText, Tooltip, txt } from '../ui/ui';
 import type { Design } from '../../data/mission';
 import { BOOSTER_BY_ID, ENGINE_BY_ID, FIXES, MATERIALS, ROCKET_PRESETS } from '../../data/specParts';
 import {
@@ -37,7 +37,7 @@ export function renderRocketTab(h: RocketHost) {
   const fixes = fixesOf(h.design);
   const apply = (nb: typeof b, note?: string | null, extraFix?: (d: Design) => void) => {
     h.change((d) => { d.spec = { ...specOf(d), rocket: nb }; extraFix?.(d); });
-    if (note) toast(h, 'Propulsion', note, 'portrait_capcom', 3500);
+    if (note) notice(h, note, { x: 214, y: 36, w: 196 }); // over the spacecraft art, never over this panel
   };
   const info = (text: string) => {
     h.detail.removeAll(true);

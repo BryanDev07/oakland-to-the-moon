@@ -208,7 +208,7 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
   }
 
   // ------------------------------------------------------------ lander (spec tab 6 #9)
-  let landerStats = base.lander;
+  let landerStats = iss ? { ...base.lander, present: false } : base.lander; // no lander on the ISS mission
   let landerSpec: SpecStats['lander'] = null;
   if (lander) {
     const li = lander.ispS!;

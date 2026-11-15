@@ -7,7 +7,11 @@
  * keep checking the same maths; this file only groups their steps.
  */
 import type { Design } from '../data/mission';
-import { MIN_UPPER_TWR, MISSION_DV } from '../data/specParts';
+import { DOCKING_FUEL_LB, MIN_UPPER_TWR } from '../data/specParts';
+import { ISS, isIss, missionCfg } from '../data/missionConfig';
+import { DOCK_START_M, NUDGE_FUEL_LB } from './docking';
+import { plannedMin } from './spacewalk';
+import { kgToLb } from './units';
 import { buildSheets, Sheet, Step } from './calcDesk';
 import { weightN } from './formulas';
 import type { DesignStats } from './spacecraft';
@@ -27,6 +31,7 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
   const all = buildSheets(d, s);
   const by = (id: string) => all.find((x) => x.id === id);
   const S = s.spec!, R = S.rocket;
+  const iss = isIss(d); // the ISS mission swaps sheets 2-5 for its own questions
   const liftoff = by('liftoff')!, twr = by('twr')!, empty = by('empty')!, ve = by('ve')!, eq = by('rocketeq')!, moon = by('moon')!, fuel = by('fuel')!;
   const capsule = by('capsule')!, lander = by('lander'), shield = by('shield')!;
   const supplies = by('supplies')!, power = by('power')!, data = by('data')!, signal = by('signal')!, money = by('money')!;
@@ -59,13 +64,13 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
   };
 
   // ---- 2. Can it reach the Moon? (old 3, 4, 5, 6, 7)
-  const spare = R.dvTotal - MISSION_DV.toMoon;
-  const thin = spare >= 0 && spare < 0.03 * MISSION_DV.toMoon;
+  const spare = R.dvTotal - R.target;
+  const thin = spare >= 0 && spare < 0.03 * R.target;
   const sheet2: Sheet = {
-    id: 'moon', n: 2, title: 'CAN IT REACH THE MOON?', question: 'Do the pieces add up to the speed the Moon needs?',
+    id: 'moon', n: 2, title: iss ? 'CAN IT REACH THE STATION?' : 'CAN IT REACH THE MOON?', question: iss ? 'Do the pieces add up to the 9,400 m/s low orbit needs?' : 'Do the pieces add up to the speed the Moon needs?',
     think: 'Throwing balls off a skateboard: more balls and faster throws mean more speed.',
-    formula: `speed gained (Δv) = exhaust speed x ln(full weight / empty weight); total must reach ${fmt(MISSION_DV.toMoon)} m/s`,
-    formulaEngineer: `Δv = ve x ln(m0 / mf); ve = Isp x 9.81; sum of Δv >= ${fmt(MISSION_DV.toMoon)} m/s`,
+    formula: `speed gained (Δv) = exhaust speed x ln(full weight / empty weight); total must reach ${fmt(R.target)} m/s`,
+    formulaEngineer: `Δv = ve x ln(m0 / mf); ve = Isp x 9.81; sum of Δv >= ${fmt(R.target)} m/s`,
     given: [...ve.given, ...eq.given],
     steps: [
       ...ve.steps,
@@ -77,11 +82,11 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
     ],
     extra: fuel.extra,
     actions: fuel.actions,
-    target: `${fmt(MISSION_DV.toMoon)} m/s to reach the Moon.`,
+    target: `${fmt(R.target)} m/s to reach ${iss ? 'the ISS' : 'the Moon'}.`,
     example: moon.example,
     verdict: () => {
       const v = moon.verdict(), f = fuel.verdict();
-      if (!v.pass) return { pass: false, text: `FAIL: ${fmt(MISSION_DV.toMoon)} needed, ${fmt(R.dvTotal)} available.`, pointer: v.pointer ?? f.pointer };
+      if (!v.pass) return { pass: false, text: `FAIL: ${fmt(R.target)} needed, ${fmt(R.dvTotal)} available.`, pointer: v.pointer ?? f.pointer };
       return { pass: true, text: `PASS: ${fmt(spare)} m/s to spare${thin ? ' (thin: one engine problem could end the mission)' : ''}.` };
     },
   };
@@ -130,5 +135,68 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
       return v;
     },
   };
-  return [sheet1, sheet2, sheet3, sheet4, sheet5].map((x) => ({ ...x, game: !x.steps.some((st) => st.kind === 'add') }));
+  const five = iss ? [sheet1, sheet2, ...issSheets(d, s, supplies, power, data, money)] : [sheet1, sheet2, sheet3, sheet4, sheet5];
+  return five.map((x) => ({ ...x, game: !x.steps.some((st) => st.kind === 'add') }));
+}
+
+/** E4: ISS sheets 3-5 (catch and dock; breathe and survive; talk and afford it). */
+function issSheets(d: Design, s: DesignStats, supplies: Sheet, power: Sheet, data: Sheet, money: Sheet): Sheet[] {
+  const S = s.spec!;
+  const capLb = kgToLb(s.mass.csmWetKg), ve = S.capsule.ve, fuelLb = kgToLb(S.capsule.propKg);
+  const phasingLb = capLb * (1 - Math.exp(-ISS.phasingDv.v / ve));
+  const homeLb = (capLb - phasingLb) * (1 - Math.exp(-ISS.deorbitDv.v / ve));
+  const leftLb = fuelLb - phasingLb - homeLb;
+  const rcsLb = kgToLb(S.rcs.fuelKg);
+  const dockNeed = Math.max(DOCKING_FUEL_LB.v, (DOCK_START_M / 10) * NUDGE_FUEL_LB) * 2; // about 12 nudges, doubled for spare
+  const hard = d.spec?.difficulty === 'hard';
+  const o2 = ISS.suitO2Hours.v * 60, plan = plannedMin('power', 'double', hard), spareMin = o2 - plan;
+  const delay = missionCfg(d).signalMiles.v / 186_282;
+  const sheet3: Sheet = {
+    id: 'issdock', n: 3, title: 'CAN WE CATCH THE STATION AND DOCK?', question: 'Enough fuel to catch up, dock, and still come home?',
+    think: 'Like catching a bus: speed up a little, then stop gently at the door.',
+    formula: 'fuel used = weight x (1 - e^(-speed / exhaust speed)); docking uses thruster fuel',
+    formulaEngineer: 'mp = m0 x (1 - e^(-Δv/ve)); Δv(phasing) 60 + Δv(de-orbit) 90 m/s; RCS >= 2 x docking need',
+    given: [`${S.capsule.name}: ${fmt(capLb)} lb, ${fmt(fuelLb)} lb fuel, exhaust ${fmt(ve)} m/s`, `Thruster fuel: ${fmt(rcsLb)} lb`],
+    steps: [
+      g('Fuel to catch up (60 m/s)', phasingLb, 'lb', 'About a day of small burns to close the gap.'),
+      g('Fuel to come home (90 m/s)', homeLb, 'lb', 'The burn that drops you out of orbit.'),
+      g('Service fuel left', leftLb, 'lb', leftLb >= 0 ? 'What is left after both burns.' : 'Negative: not enough fuel.'),
+      g('Thruster fuel for docking, with spare', dockNeed, 'lb', 'Every nudge on the approach uses thruster fuel.'),
+    ],
+    target: `Fuel left above 0; thruster fuel at least ${fmt(dockNeed)} lb.`,
+    verdict: () => (leftLb < 0 ? { pass: false, text: `FAIL: ${fmt(-leftLb)} lb of fuel short.`, pointer: 'A capsule with more service-module fuel.' }
+      : rcsLb < dockNeed ? { pass: false, text: `FAIL: ${fmt(rcsLb)} lb of thruster fuel; docking needs ${fmt(dockNeed)}.`, pointer: 'A bigger thruster tank.' }
+      : { pass: true, text: `PASS: ${fmt(leftLb)} lb of fuel and ${fmt(rcsLb - dockNeed)} lb of thruster fuel to spare.` }),
+  };
+  const sheet4: Sheet = {
+    id: 'issbreathe', n: 4, title: 'CAN THE SPACEWALKER BREATHE?', question: 'Does the suit last the whole job, and does the crew have supplies?',
+    think: 'A spacesuit is a tiny spaceship: about 8 hours of oxygen.',
+    formula: 'spare = suit oxygen - (moves + swap + unfold); keep 30 minutes; supplies = crew x days x pounds per day',
+    formulaEngineer: `t(spare) = ${o2} - ${plan} min >= 30; lb = n x d x 14.97`,
+    given: [`Suit oxygen: ${ISS.suitO2Hours.v} hours = ${o2} minutes`, ...supplies.given],
+    steps: [
+      g('Planned spacewalk (power tool, double tether)', plan, 'min', 'Twelve handrail moves, the swap and the unfold.'),
+      g('Suit oxygen spare', spareMin, 'min', spareMin >= ISS.evaReserveMin.v ? 'More than the 30-minute reserve.' : 'Under the 30-minute reserve.'),
+      ...supplies.steps, // the player adds the 4 supply lines
+      ...power.steps,
+    ],
+    target: `${ISS.evaReserveMin.v} min of suit oxygen spare; supplies for ${fmt(s.missionDays, 1)} days.`,
+    verdict: () => (spareMin < ISS.evaReserveMin.v ? { pass: false, text: `FAIL: only ${fmt(spareMin)} min spare.`, pointer: 'Use the power tool and fewer moves.' }
+      : { pass: true, text: `PASS: ${fmt(spareMin)} min of suit oxygen spare.` }),
+  };
+  const sheet5: Sheet = {
+    id: 'isstalk', n: 5, title: 'CAN WE TALK AND AFFORD IT?', question: 'How late are messages, and is there money left?',
+    think: 'Messages go up to a relay satellite and back down.',
+    formula: 'seconds = miles / 186,282; money left = budget - spent',
+    formulaEngineer: 't = 47,000 / 186,282; left = budget - sum(spent)',
+    given: [missionCfg(d).signalWhy, ...money.given],
+    steps: [
+      ...data.steps,
+      g('Signal delay one way', delay, 's', 'Short: mission control can talk you through the spacewalk.', 0.01),
+      ...money.steps, // the player adds the receipt
+    ],
+    target: 'Money left above $0.',
+    verdict: () => { const v = money.verdict(); return v.pass ? { pass: true, text: `PASS: ${v.text} Messages take ${delay.toFixed(2)} s.` } : { pass: false, text: `FAIL: ${v.text}`, pointer: v.pointer }; },
+  };
+  return [sheet3, sheet4, sheet5];
 }

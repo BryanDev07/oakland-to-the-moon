@@ -5,7 +5,7 @@ choices, documented with their simplifications in `docs/SCIENTIFIC_ASSUMPTIONS.m
 next to each number in `src/data/specParts.ts`, and the in-game **Science library** (pause menu →
 LIBRARY) shows every formula and part value with its tag and a link to its source.
 
-The links were collected in the project spec (`JOSEPH_SPEC.md`, tab 8) and were not re-fetched while
+The links were collected in the project spec (`docs/JOSEPH_SPEC.md`, tab 8) and were not re-fetched while
 the code was written; please report any link that has moved.
 
 ## Challenge
@@ -76,6 +76,16 @@ the code was written; please report any link that has moved.
 | 16. Hydrogen leak while fueling | Artemis I scrub, 2022 (Space.com) — https://www.space.com/artemis-1-launch-scrub-hydrogen-leak |
 | Risk table: composite hydrogen tank | X-33, 1999 (Wikipedia) — https://en.wikipedia.org/wiki/Lockheed_Martin_X-33 |
 | Risk table: carbon bottle in liquid oxygen | 2016 Falcon 9 pad explosion (CompositesWorld) — https://compositesworld.com/articles/spacex-announces-copvs-role-in-sept-rocket-explosion |
+
+### ISS mission deck
+| Card | Source |
+|---|---|
+| 11. Small cabin leak (shared) | Soyuz MS-09, 2018 (NBC News), above |
+| 12. Thrusters failing during docking (ISS version) | Starliner, 2024 (Space.com), above |
+| 18. Water in the spacewalker's helmet | Luca Parmitano's helmet water leak, 2013 (Space.com) — https://space.com/21988-spacewalk-dangers-spacesuit-water-leak.html |
+| 19. Tool bag floats away | Lost tool bag, STS-126, 2008 (Space.com) — https://www.space.com/6131-astronaut-laments-lost-spacewalk-tool-bag.html |
+| 20. Solar array tears while unfolding | Torn ISS solar array repaired on a spacewalk, STS-120, 2007 (ESA) — https://www.esa.int/ESA_Multimedia/Images/2007/11/Spacewalk_to_repair_the_Station_s_torn_solar_array |
+| 17. Debris avoidance | Scenario based on real events (the ISS regularly fires thrusters to dodge debris); no single source needed. |
 
 Cards **3, 6, 9, 10, 14 and 15** are made up but realistic: the game labels them
 "Scenario (made up, realistic)", never "this really happened". Card **13** (loss of signal behind

@@ -4,6 +4,7 @@ import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, crt, Dialogue, fadeIn, fadeTo, gearButton, H, panel, toast, txt, W } from '../ui/ui';
 import * as Sim from '../../simulation/mission';
+import { missionOf } from '../../data/missionConfig';
 
 /** Earth entry, parachutes, Pacific splashdown and an Oakland homecoming. */
 export class ReturnScene extends Phaser.Scene {
@@ -32,7 +33,8 @@ export class ReturnScene extends Phaser.Scene {
     gearButton(this);
     crt(this);
     audio.loop('wind', 0.7);
-    toast(this, 'CAPCOM Sam', 'Entry interface at 11 km/s. Expect about four minutes of radio blackout while plasma surrounds you. See you on the other side.', 'portrait_capcom', 5000);
+    const iss = missionOf(s.design) === 'iss';
+    toast(this, 'CAPCOM Sam', iss ? 'Entry at 17,500 mph from low orbit. A few minutes of radio blackout.' : 'Entry at 24,500 mph from the Moon. About four minutes of radio blackout.', 'portrait_capcom', 4500);
   }
   update(_t: number, dtMs: number) {
     if (this.stage > 1 || this.skipped) return;
@@ -109,8 +111,11 @@ export class ReturnScene extends Phaser.Scene {
     const samples = Math.round(s.samplesAboardKg);
     const d = new Dialogue(this);
     d.play([
-      { who: 'Auntie Dee', text: 'There she is! Commander Kai Alvarado, back from the Moon! So... did you bring my rock?', portrait: 'portrait_dee' },
-      { who: 'Commander Kai', text: samples > 0 ? `We brought home ${fmtLb(s.samplesAboardKg)} of them, Auntie Dee. They go to the scientists first. But I saved you a photo of your plaque up there.` : 'No rocks this time, Auntie Dee. But we learned what to do better, and next time we will.', portrait: 'portrait_kai' },
+      ...(s.iss ? [
+        { who: 'Auntie Dee', text: 'There she is! Commander Kai Alvarado, back from the space station! Did the solar panel work?', portrait: 'portrait_dee' },
+        { who: 'Commander Kai', text: s.iss.panelFixed ? 'Full power again, Auntie Dee. The station crew says thank you.' : 'Not this time, Auntie Dee. We learned what to do better.', portrait: 'portrait_kai' },
+      ] : [{ who: 'Auntie Dee', text: 'There she is! Commander Kai Alvarado, back from the Moon! So... did you bring my rock?', portrait: 'portrait_dee' }]),
+      ...(s.iss ? [] : [{ who: 'Commander Kai', text: samples > 0 ? `We brought home ${fmtLb(s.samplesAboardKg)} of them, Auntie Dee. They go to the scientists first. But I saved you a photo of your plaque up there.` : 'No rocks this time, Auntie Dee. But we learned what to do better, and next time we will.', portrait: 'portrait_kai' }]),
       { who: 'Director Cole', text: 'Welcome home, Commander. Let us see how the mission scored. Every flight teaches the next one.', portrait: 'portrait_director' },
     ], () => fadeTo(this, 'Report'));
     new Button(this, W - 92, 4, 'SKIP ▶▶', () => fadeTo(this, 'Report'), { w: 52 }).setDepth(1200);
