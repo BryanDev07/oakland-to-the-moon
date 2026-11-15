@@ -3,6 +3,7 @@ import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, crt, fadeIn, fadeTo, gearButton, H, modal, panel, txt, W } from '../ui/ui';
 import { cloneDesign, BASELINE_DESIGN } from '../../data/mission';
+import { modalState } from '../ui/ui';
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
@@ -29,6 +30,7 @@ export class TitleScene extends Phaser.Scene {
     const hasSave = !!store.mission && store.mission.phase !== 'COMPLETE';
     const items: [string, () => void, string][] = [
       ['NEW MISSION', () => this.newMission(), 'Start the story in Oakland.'],
+      ['QUICK START', () => this.quickStart(), 'Skip the story: go straight to the spacecraft builder (Q).'],
       ...(hasSave ? [['CONTINUE MISSION', () => this.continueMission(), 'Resume your saved mission.'] as [string, () => void, string]] : []),
       ['HOW TO PLAY', () => this.howTo(), 'Controls and goals.'],
       ['ABOUT & SOURCES', () => this.about(), 'Science references and credits.'],
@@ -41,13 +43,42 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: hint, alpha: 0.15, duration: 600, yoyo: true, repeat: -1 });
     gearButton(this);
     crt(this);
-    this.input.keyboard?.once('keydown-ENTER', () => { audio.unlock(); audio.sfx('select'); hasSave ? this.continueMission() : this.newMission(); });
+    // Enter starts (or continues) the mission, but not while a window (How to play, Quick start) is open:
+    // Phaser fires keydown-ENTER before the window's own key handler, so the window is still counted open.
+    this.input.keyboard?.on('keydown-ENTER', () => { if (modalState.open) return; audio.unlock(); audio.sfx('select'); hasSave ? this.continueMission() : this.newMission(); });
     this.input.once('pointerdown', () => audio.unlock());
+    this.input.keyboard?.on('keydown-Q', () => { if (!modalState.open) { audio.unlock(); this.quickStart(); } });
   }
   newMission() {
     store.clearMission();
     if (!store.design || !store.design.slots) store.design = cloneDesign(BASELINE_DESIGN);
     fadeTo(this, store.seen.intro ? 'Intro' : 'Intro', { skippable: !!store.seen.intro });
+  }
+  /**
+   * Quick start (for judges and returning players): skip Oakland, the briefing and the role and mission
+   * picks, and open the hangar with the starter design, which is deliberately too heavy for its
+   * rocket. NEW MISSION still plays the full story.
+   */
+  quickStart() {
+    if (modalState.open) return;
+    audio.sfx('select');
+    modal(this, {
+      title: 'QUICK START: THE HANGAR',
+      text: 'You are the chief engineer of TOWN-1, a crewed Moon landing. Every part you pick changes the spacecraft\'s mass, cost, power and fuel, and the rocket equation decides whether it can reach the Moon and bring the crew home.\n\n' +
+        'The starter design is too heavy for its rocket. Fix the red items (HINT helps), check the math at the Calculation Desk, pass the design review, then launch.\n\n' +
+        'The full Oakland story is under NEW MISSION.',
+      options: [{ label: 'TO THE HANGAR' }, { label: 'Back' }],
+      width: 380,
+      onChoose: (i) => {
+        if (i !== 0) return;
+        store.clearMission();
+        const d = cloneDesign(BASELINE_DESIGN);
+        d.spec = { ...d.spec, role: 'commander', difficulty: 'easy', mission: 'moon' };
+        store.design = d;
+        store.saveDesign();
+        fadeTo(this, 'Hangar', { tutorial: true, quick: true });
+      },
+    });
   }
   continueMission() {
     const m = store.mission!;
