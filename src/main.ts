@@ -35,6 +35,13 @@ const game = new Phaser.Game({
   input: { activePointers: 1 },
 });
 
+// A5: re-fit on any resize without a reload (FIT does most of it; refresh covers browser zoom,
+// orientation changes and leaving fullscreen, where the parent's size can lag a frame)
+const refit = () => requestAnimationFrame(() => game.scale.refresh());
+window.addEventListener('resize', refit);
+window.addEventListener('orientationchange', refit);
+document.addEventListener('fullscreenchange', refit);
+
 // F toggles fullscreen anywhere (the gear's neighbour button does the same).
 window.addEventListener('keydown', (e) => {
   if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) game.scale.toggleFullscreen();

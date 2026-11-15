@@ -99,6 +99,16 @@ test.describe('Oakland to the Moon', () => {
     console.log(`load-to-title ${loadMs} ms, fps ${fps.toFixed(1)}`);
     expect(fps).toBeGreaterThan(20);
     await page.screenshot({ path: `${SHOTS}/01-title.png` });
+    // A5: resizing the window re-fits the canvas without a reload (16:9, inside the window)
+    for (const [w, h] of [[1024, 768], [1920, 1080], [1366, 600]]) {
+      await page.setViewportSize({ width: w, height: h });
+      await page.waitForTimeout(400);
+      const r = (await page.locator('canvas').boundingBox())!;
+      expect(r.width).toBeLessThanOrEqual(w + 1); expect(r.height).toBeLessThanOrEqual(h + 1);
+      expect(Math.min(w - r.width, h - r.height)).toBeLessThanOrEqual(2); // fills one dimension
+      expect(Math.abs(r.width / r.height - 16 / 9)).toBeLessThan(0.02);
+    }
+    await page.setViewportSize({ width: 1366, height: 768 });
     expect(errors).toEqual([]);
   });
 
