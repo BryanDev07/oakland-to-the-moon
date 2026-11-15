@@ -249,6 +249,7 @@ export class DeskScene extends Phaser.Scene {
     void tip; // no hover tooltips on the desk: they covered NEXT / HANGAR and the answers (A2)
     const b = new Button(this, x, y, label, cb, { w, h: 19, style });
     b.label.setFontSize(BODY).setY(2);
+    if (b.label.width > w - 8) b.label.setFontSize(10).setY(5); // long labels (EXAMPLE, REVEAL) drop to the base font to stay inside the button
     return b;
   }
   fmtVal(st: Step, v: number) {

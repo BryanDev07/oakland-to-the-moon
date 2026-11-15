@@ -442,23 +442,39 @@ function toastQueue(scene: Phaser.Scene) {
   return q;
 }
 /**
+ * Where a scene's toasts go. Default: top right. Scenes whose right-hand side is an interactive panel
+ * (hangar systems, flight controls, EVA list) move toasts over their artwork so no control is hidden.
+ * `bottom`: y is the box's bottom edge instead of its top.
+ */
+export interface ToastAnchor { x: number; y: number; w?: number; bottom?: boolean }
+const toastAnchors = new WeakMap<Phaser.Scene, ToastAnchor>();
+export function setToastAnchor(scene: Phaser.Scene, a: ToastAnchor) {
+  toastAnchors.set(scene, a);
+  scene.events.once('shutdown', () => toastAnchors.delete(scene));
+}
+
+/**
  * Mission Control / CAPCOM message: at most two lines (about a fifth of the screen), top right, clear of
- * the resource meters and time buttons. Long messages page; messages queue so only one box shows.
+ * the resource meters and time buttons, or where the scene's toast anchor says. Long messages page;
+ * messages queue so only one box shows.
  */
 export function toast(scene: Phaser.Scene, who: string, text: string, portrait = 'portrait_capcom', ms = 4200): void {
   const q = toastQueue(scene);
+  const anchor = toastAnchors.get(scene);
+  const boxW = anchor?.w ?? 252, textW = boxW - 38;
   const run = () => {
     q.busy = true;
-    const probe = txt(scene, 0, -999, '', { maxWidth: 214, size: 15 });
+    const probe = txt(scene, 0, -999, '', { maxWidth: textW, size: 15 });
     const pages = pageBySentence(text, (x) => { probe.setText(x); return probe.height <= 2 * 16 + 2; }); // pages end at sentences
     probe.destroy();
     const done = () => { q.busy = false; const nxt = q.queue.shift(); if (nxt && scene.sys.isActive()) nxt(); };
     const show = (i: number) => {
-      const c = scene.add.container(W - 256, 21).setDepth(800); // below the SKIP / fullscreen / gear buttons
+      const c = scene.add.container(anchor?.x ?? W - 256, anchor?.y ?? 21).setDepth(800); // default: below the SKIP / fullscreen / gear buttons
       q.current = c;
-      const t = txt(scene, 34, 15, pages[i] ?? '', { maxWidth: 214, color: C.white, size: 15 });
+      const t = txt(scene, 34, 15, pages[i] ?? '', { maxWidth: textW, color: C.white, size: 15 });
       const h = Math.max(36, t.height + 21);
-      c.add(panel(scene, 0, 0, 252, h, 'dialog'));
+      if (anchor?.bottom) c.setY(anchor.y - h);
+      c.add(panel(scene, 0, 0, boxW, h, 'dialog'));
       const pi = scene.add.image(4, 4, portrait).setOrigin(0, 0).setScale(0.5);
       c.add([pi, txt(scene, 34, 4, `${who.toUpperCase()}${pages.length > 1 ? `  ${i + 1}/${pages.length}` : ''}`, { color: C.gold2 }), t]);
       pinToScreen(c);

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, chapterCard, crt, fadeIn, fadeTo, fmtTime, gearButton, iconFrame, Meter, modal, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
+import { Button, C, chapterCard, crt, fadeIn, fadeTo, fmtTime, gearButton, iconFrame, Meter, modal, pagedText, panel, setToastAnchor, toast, Tooltip, txt, W } from '../ui/ui';
 import { SpacecraftView } from '../components/SpacecraftView';
 import * as Sim from '../../simulation/mission';
 import { COMPONENT_BY_ID } from '../../data/components';
@@ -85,7 +85,7 @@ export class OpsScene extends Phaser.Scene {
     g.lineStyle(2, 0x08060f).strokeRect(1, 1, 317, 167); g.lineStyle(1, 0x4268ad).strokeRect(2, 2, 315, 165);
     // ------------------------------------------------ right column
     panel(this, 320, 0, 160, 72, 'panel');
-    this.phaseText = txt(this, 400, 6, '', { align: 'center', color: C.gold });
+    this.phaseText = txt(this, 326, 6, '', { color: C.gold }); // left-aligned: clear of the fullscreen / gear buttons
     this.clockText = txt(this, 400, 18, '', { align: 'center', color: C.white, scale: 2 });
     this.nextText = txt(this, 326, 42, '', { color: C.text, maxWidth: 148 });
     panel(this, 320, 72, 160, 98, 'panel_dark');
@@ -127,6 +127,7 @@ export class OpsScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-L', () => this.openLog());
     learned(this, 'resources', 2500); // D1: fuel, power, oxygen, water and data in flight
     gearButton(this);
+    setToastAnchor(this, { x: 34, y: 166, bottom: true }); // bottom of the space view, not the flight panels
     crt(this);
     this.input.keyboard?.on('keydown-SPACE', () => this.setSpeed(this.speed === 0 ? 1 : 0));
     this.input.keyboard?.on('keydown-ONE', () => this.setSpeed(1));

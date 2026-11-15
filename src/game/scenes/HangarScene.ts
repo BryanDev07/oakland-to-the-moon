@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, icon, iconFrame, kg, Meter, modal, modalState, onceKey, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
+import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, icon, iconFrame, kg, Meter, modal, modalState, onceKey, pagedText, panel, setToastAnchor, toast, Tooltip, txt, W } from '../ui/ui';
 import { SpacecraftView } from '../components/SpacecraftView';
 import { COMPONENT_BY_ID, Component, componentsInSlot, SLOTS, SlotId } from '../../data/components';
 import { cloneDesign, Design, LAUNCH_VEHICLES, REFERENCE_DESIGN, SITES, TEMPOS, LV_BY_ID, SITE_BY_ID } from '../../data/mission';
@@ -21,6 +21,10 @@ import { missionOf } from '../../data/missionConfig';
 type Cat = SlotId | 'plan' | 'style' | 'rocket';
 const FLOOR_Y = 209;
 
+/** Whole-word button labels that fit the 3-across plan buttons (full names are in the tooltips). */
+const SITE_LABEL: Record<string, string> = { equator: 'TRANQ.', marius: 'MARIUS', pole: 'S. POLE' };
+const TEMPO_LABEL: Record<string, string> = { conservative: 'LOW', balanced: 'MEDIUM', aggressive: 'HIGH' };
+
 export class HangarScene extends Phaser.Scene {
   design!: Design;
   review!: ReviewResult;
@@ -36,7 +40,7 @@ export class HangarScene extends Phaser.Scene {
   summary!: Phaser.GameObjects.BitmapText;
   constructor() { super('Hangar'); }
 
-  create(data: { tutorial?: boolean }) {
+  create(data: { tutorial?: boolean; quick?: boolean }) {
     fadeIn(this);
     audio.music('build');
     this.design = cloneDesign(store.design);
@@ -126,10 +130,11 @@ export class HangarScene extends Phaser.Scene {
       }
     }));
     gearButton(this);
+    setToastAnchor(this, { x: 109, y: 21, w: 210 }); // over the spacecraft art, not the Mission Plan panel
     crt(this);
     this.selectCat('plan');
     this.refresh();
-    if (data?.tutorial && !store.seen.hangarTut) {
+    if (data?.tutorial && (!store.seen.hangarTut || data.quick)) { // quick start always shows the first task
       chapterCard(this, 2, 'THE BUILD', () => {
         toast(this, 'Director Cole', missionOf(this.design) === 'iss' ? 'Build a lean ship for the ISS: a small rocket and a cheap Earth-orbit capsule are enough. Red icons show problems.' : 'This baseline design will NOT reach the Moon and back. Red icons show the problems. Fix them, then press REVIEW.', 'portrait_director', 7000);
         store.markSeen('hangarTut');
@@ -392,10 +397,10 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
       });
     };
     row(19, 'LAUNCH VEHICLE', LAUNCH_VEHICLES.map((v) => ({ id: v.id, label: v.short.split(' ')[0].toUpperCase().slice(0, 7), tip: SPEC_MODEL ? (missionOf(this.design) === 'iss' ? `${v.name}: rocket ${fmtUsdM(v.costM)}. The ISS needs 9,400 m/s; a smaller rocket saves money.` : `${v.name}: ${fmt(kgToLb(v.tliCapacityKg))} lb to the Moon (12,600 m/s), rocket ${fmtUsdM(v.costM)}.\n${v.desc}\n${v.learn}`) : `${v.name}: ${(v.tliCapacityKg / 1000).toFixed(1)} t to TLI, $${v.costM}M, ${(v.reliability * 100).toFixed(1)}% reliable.\n${v.desc}\n${v.learn}` })), p.lv, (v) => { this.design.plan.lv = v as Design['plan']['lv']; if (this.design.spec) this.design.spec.rocket = null; });
-    if (missionOf(this.design) !== 'iss') row(46, 'LANDING SITE', SITES.map((s) => ({ id: s.id, label: s.short.split(' ')[0].toUpperCase().slice(0, 7), tip: `${s.name}: ${SPEC_MODEL ? `LOI ${missionDv(this.design).loi} m/s, TEI ${missionDv(this.design).tei} m/s, descent ${missionDv(this.design).descent} m/s (set by the lunar orbit)` : `LOI ${s.dvLoi} m/s, TEI ${s.dvTei} m/s, descent ${s.dvDescent} m/s`}. Science x${s.scienceMult}.\n${s.desc}\n${s.learn}` })), p.site, (v) => { this.design.plan.site = v as Design['plan']['site']; });
+    if (missionOf(this.design) !== 'iss') row(46, 'LANDING SITE', SITES.map((s) => ({ id: s.id, label: SITE_LABEL[s.id], tip: `${s.name}: ${SPEC_MODEL ? `LOI ${missionDv(this.design).loi} m/s, TEI ${missionDv(this.design).tei} m/s, descent ${missionDv(this.design).descent} m/s (set by the lunar orbit)` : `LOI ${s.dvLoi} m/s, TEI ${s.dvTei} m/s, descent ${s.dvDescent} m/s`}. Science x${s.scienceMult}.\n${s.desc}\n${s.learn}` })), p.site, (v) => { this.design.plan.site = v as Design['plan']['site']; });
     row(73, 'CREW SIZE', [{ id: 3, label: '3 CREW', tip: '3 crew: 2 land, 1 stays in orbit (Apollo style). Fewer consumables.' }, { id: 4, label: '4 CREW', tip: '4 crew: up to 3 land with the Pathfinder lander. More EVA hours, more consumables and mass.' }], p.crew, (v) => { this.design.plan.crew = v as 3 | 4; });
     if (missionOf(this.design) !== 'iss') row(100, 'SURFACE STAY', [1, 2, 3].map((d) => ({ id: d, label: `${d} DAY${d > 1 ? 'S' : ''}`, tip: `${d} day(s) on the surface. Longer stays allow more EVAs but need lander battery & consumables (and crew food/water in orbit).` })), p.stayDays, (v) => { this.design.plan.stayDays = v as 1 | 2 | 3; });
-    row(127, 'OPS TEMPO', TEMPOS.map((t) => ({ id: t.id, label: t.name.slice(0, 7).toUpperCase(), tip: `${t.name}: ${t.desc}` })), p.tempo, (v) => { this.design.plan.tempo = v as Design['plan']['tempo']; });
+    row(127, 'OPS TEMPO', TEMPOS.map((t) => ({ id: t.id, label: TEMPO_LABEL[t.id], tip: `${t.name}: ${t.desc}` })), p.tempo, (v) => { this.design.plan.tempo = v as Design['plan']['tempo']; });
     const lv = LV_BY_ID[p.lv], site = SITE_BY_ID[p.site];
     this.planDetail(missionOf(this.design) === 'iss' ? `${lv.name} to the ISS, about 250 miles up: the rocket must reach 9,400 m/s.` : `${lv.name}${specOf(this.design).rocket ? ' (fuel set at the Calculation Desk)' : ''} → ${site.name}. ${site.desc}`);
   }

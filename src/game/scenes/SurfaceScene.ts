@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, crt, Dialogue, fadeIn, fadeTo, gearButton, H, iconFrame, Meter, modal, panel, toast, txt, W } from '../ui/ui';
+import { Button, C, crt, Dialogue, fadeIn, fadeTo, gearButton, H, iconFrame, Meter, modal, panel, setToastAnchor, toast, txt, W } from '../ui/ui';
 import * as Sim from '../../simulation/mission';
 import { showEmergency } from '../ui/emergency';
 import { fmt, fmtLb, kgToLb } from '../../simulation/units';
@@ -45,7 +45,7 @@ export class SurfaceScene extends Phaser.Scene {
     panel(this, 2, 2, 326, 30, 'panel_dark');
     this.status = txt(this, 8, 7, '', { color: C.text, maxWidth: 316 });
     panel(this, 330, 2, 148, 212, 'panel');
-    txt(this, 404, 7, 'EVA ACTIVITIES', { align: 'center', color: C.gold });
+    txt(this, 336, 7, 'EVA ACTIVITIES', { color: C.gold }); // left-aligned: clear of the fullscreen / gear buttons
     this.list = this.add.container(0, 0);
     panel(this, 2, 216, 476, 52, 'panel');
     this.ascent = new Meter(this, 8, 221, 150, 'ASCENT Δv', 'rocket');
@@ -54,6 +54,7 @@ export class SurfaceScene extends Phaser.Scene {
     new Button(this, 336, 220, 'REST ▶ NEXT DAY', () => this.rest(), { w: 138, h: 20, tooltip: 'End this EVA day: sleep in the lander. Uses lander battery; crew recovers EVA time.' });
     new Button(this, 336, 243, 'LIFT OFF ▲', () => this.liftoff(), { w: 138, h: 20, style: 'go', tooltip: 'Leave the surface in the ascent stage and rendezvous with the capsule.' });
     gearButton(this);
+    setToastAnchor(this, { x: 39, y: 36 }); // in the sky, not over the EVA activity list
     crt(this);
     this.dlg = new Dialogue(this, 'top'); // the astronauts work at the bottom of the screen
     this.refresh();
