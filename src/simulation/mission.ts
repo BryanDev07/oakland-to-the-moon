@@ -88,7 +88,13 @@ export function log(s: MissionState, text: string, kind: LogEntry['kind'] = 'inf
   if (s.log.length > 200) s.log.shift();
 }
 const comp = (s: MissionState, slot: string) => s.stats.parts.find((p) => p.slot === slot);
-export const isp = (s: MissionState) => (comp(s, 'propulsion')?.ispS ?? 300) * s.ispFactor;
+/**
+ * Service-module Isp for flight burns. Uses the same value the design review used
+ * (stats.propulsion.ispS): the capsule's engine in the spec model, the engine slot in the legacy
+ * model. The spec model hides the propulsion slot, so reading the slot here fell back to 300 s and
+ * made flight margins smaller than the review promised.
+ */
+export const isp = (s: MissionState) => (s.stats.propulsion?.ispS ?? comp(s, 'propulsion')?.ispS ?? 300) * s.ispFactor;
 
 function consumablesMass(s: MissionState) { return Math.max(0, s.o2Kg) + Math.max(0, s.waterKg) + Math.max(0, s.foodKg); }
 
