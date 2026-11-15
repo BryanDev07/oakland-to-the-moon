@@ -62,6 +62,17 @@ describe('spec model: the physics lessons', () => {
     const apolloStyle = cloneDesign(REFERENCE_DESIGN); apolloStyle.spec = { ...apolloStyle.spec, capsule: 'cap_orion' }; apolloStyle.plan.crew = 4;
     expect(status(apolloStyle, 'propulsion')).toBe('fail');
   });
+  it('the review shows the real numbers when it blocks Orion + low orbit and Apollo LM + halo orbit', () => {
+    const o = artemis(); o.spec = { ...o.spec, orbit: 'LLO' };
+    const so = analyzeDesign(o), po = reviewDesign(o).checks.find((c) => c.id === 'propulsion')!;
+    expect(po.status).toBe('fail');
+    expect(po.value).toContain(Math.round(so.spec!.capsuleReturn.dvLeft).toLocaleString('en-US'));
+    expect(po.detail).toMatch(/Need 900/);
+    const a = cloneDesign(REFERENCE_DESIGN); a.spec = { ...a.spec, orbit: 'NRHO' };
+    const la = reviewDesign(a).checks.find((c) => c.id === 'lander_dv')!;
+    expect(la.status).toBe('fail');
+    expect(la.detail).toMatch(/2,600 m\/s/);
+  });
   it('Orion in the halo orbit gets home', () => {
     expect(status(artemis(), 'propulsion')).not.toBe('fail');
     expect(reviewDesign(artemis()).go).toBe(true);

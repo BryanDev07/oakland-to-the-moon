@@ -5,10 +5,15 @@ import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, panel, txt, W 
 import { evaluate, MissionReport, SCIENCE_FULL_POINTS } from '../../simulation/scoring';
 import { createMission } from '../../simulation/mission';
 import { LV_BY_ID, SITE_BY_ID } from '../../data/mission';
+import { endSummary } from '../../simulation/endSummary';
+
+/** Tab buttons → pages of show(): STORY is page 6 (shown first). */
+const TAB_PAGES = [6, 0, 1, 2, 3, 4];
 
 export class ReportScene extends Phaser.Scene {
   rep!: MissionReport;
   page!: Phaser.GameObjects.Container;
+  prevNote = '';
   tabs: Button[] = [];
   constructor() { super('Report'); }
   create() {
@@ -32,32 +37,30 @@ export class ReportScene extends Phaser.Scene {
     // left column: outcome + score
     panel(this, 4, 4, 172, 262, 'panel');
     txt(this, 90, 9, 'CHAPTER 7: MISSION REPORT', { align: 'center', color: C.gold });
-    const patch = this.add.image(90, 66, 'patch');
+    const patch = this.add.image(90, 64, 'patch');
     if (success) this.tweens.add({ targets: patch, angle: 360, duration: 1200, ease: 'Cubic.Out' });
     const oc = rep.outcome === 'FULL_SUCCESS' ? C.green : rep.outcome === 'MISSION_LOST' ? C.red : C.orange;
-    txt(this, 90, 116, rep.outcomeLabel, { align: 'center', color: oc, maxWidth: 160 });
-    txt(this, 52, 127, String(rep.overall), { align: 'center', color: C.white, scale: 2 });
-    txt(this, 52, 148, 'SCORE /100', { align: 'center', color: C.dim });
-    txt(this, 130, 127, rep.grade, { align: 'center', color: oc, scale: 2 });
-    txt(this, 130, 148, `ENG. ${rep.engineeringGrade}`, { align: 'center', color: C.teal });
+    const ol = txt(this, 90, 114, rep.outcomeLabel, { align: 'center', color: oc, maxWidth: 164, size: 15 });
+    const sy = 114 + ol.height + 2;
+    txt(this, 12, sy, `${rep.overall}/100`, { color: C.white, scale: 2 });
+    txt(this, 168, sy, rep.grade, { align: 'right', color: oc, scale: 2 });
     // category bars
+    const short: Record<string, string> = { science: 'Science', crew: 'Crew safety', engineering: 'Engineering', resources: 'Resources', budget: 'Budget' };
+    const by = sy + 26;
     rep.parts.forEach((p, i) => {
-      const y = 162 + i * 16;
-      txt(this, 10, y, `${p.label} (${Math.round(p.weight * 100)}%)`, { color: C.text });
+      const y = by + i * 17;
+      txt(this, 10, y, `${short[p.key]} ${Math.round(p.weight * 100)}%`, { color: C.white, size: 15 });
       const g = this.add.graphics();
-      g.fillStyle(C.ink).fillRect(10, y + 10, 160, 4);
-      g.fillStyle(p.score >= 0.7 ? C.green : p.score >= 0.4 ? C.orange : C.red).fillRect(10, y + 10, Math.round(160 * p.score), 4);
-      txt(this, 170, y, `${Math.round(p.score * 100)}`, { align: 'right', color: C.dim });
+      g.fillStyle(C.ink).fillRect(10, y + 14, 160, 2);
+      g.fillStyle(p.score >= 0.7 ? C.green : p.score >= 0.4 ? C.orange : C.red).fillRect(10, y + 14, Math.round(160 * p.score), 2);
+      txt(this, 170, y, `${Math.round(p.score * 100)}`, { align: 'right', color: p.score >= 0.7 ? C.green : p.score >= 0.4 ? C.orange : C.red, size: 15 });
     });
-    if (prev) {
-      const d = rep.overall - prev.score;
-      txt(this, 90, 248, `Previous run: ${prev.score} (${prev.grade})  ${d >= 0 ? '↑' : '↓'}${Math.abs(d)}`, { align: 'center', color: d >= 0 ? C.green : C.orange });
-    } else txt(this, 90, 248, 'First recorded mission!', { align: 'center', color: C.dim });
+    if (prev) { const d = rep.overall - prev.score; this.prevNote = `Previous run: ${prev.score} (${prev.grade}), ${d >= 0 ? 'up' : 'down'} ${Math.abs(d)}.`; }
     // right: tabbed details
     panel(this, 180, 4, 296, 236, 'panel');
-    const tabNames = ['SCIENCE', 'SUPPLIES', 'DECISIONS', 'LESSONS', 'HISTORY'];
+    const tabNames = ['STORY', 'SCIENCE', 'SUPPLY', 'CALLS', 'LESSONS', 'HISTORY'];
     let tx = 184;
-    tabNames.forEach((n, i) => { const w = n.length * 6 + 4; const b = new Button(this, tx, 9, n, () => this.show(i), { w, h: 15 }); tx += w + 2; this.tabs.push(b); }); // ends before the fullscreen + gear buttons
+    tabNames.forEach((n, i) => { const w = n.length * 6 + 4; const b = new Button(this, tx, 9, n, () => this.show(TAB_PAGES[i]), { w, h: 15 }); tx += w + 2; this.tabs.push(b); }); // ends before the fullscreen + gear buttons
     this.page = this.add.container(0, 0);
     new Button(this, 180, 244, 'FLY AGAIN', () => this.flyAgain(), { w: 72, h: 22, style: 'go', tooltip: 'Same spacecraft, new launch day (different events).' });
     new Button(this, 256, 244, 'MODIFY DESIGN', () => { store.clearMission(); fadeTo(this, 'Hangar'); }, { w: 104, h: 22, tooltip: 'Back to the hangar with your design preserved.' });
@@ -65,7 +68,7 @@ export class ReportScene extends Phaser.Scene {
     new Button(this, 420, 244, 'CREDITS', () => this.show(5), { w: 56, h: 22 });
     gearButton(this);
     crt(this);
-    this.show(rep.failures.length && !success ? 3 : 0);
+    this.show(6);
     if (!store.seen.chap7) { chapterCard(this, 7, 'MISSION REPORT'); store.markSeen('chap7'); }
   }
   flyAgain() {
@@ -75,7 +78,7 @@ export class ReportScene extends Phaser.Scene {
     fadeTo(this, 'Launch');
   }
   show(i: number, pageNo = 0) {
-    this.tabs.forEach((b, k) => b.setSelected(k === i));
+    this.tabs.forEach((b, k) => b.setSelected(TAB_PAGES[k] === i));
     const P = this.page;
     P.removeAll(true);
     const r = this.rep;
@@ -85,13 +88,21 @@ export class ReportScene extends Phaser.Scene {
     let n = 0, pages = 1;
     // Never clip and never shrink the pixel font: lines that do not fit flow onto the next page.
     const line = (text: string, color: number = C.text, indent = 0) => {
-      const t = txt(this, x + indent, y, text, { color, maxWidth: 280 - indent });
+      const t = txt(this, x + indent, y, text, { color: color === C.dim ? C.text : color, maxWidth: 280 - indent, size: 15 });
       const h = t.height;
       if (y + h > BOTTOM) { pages++; y = 30; n = 0; }
       if (pages - 1 !== pageNo) { t.destroy(); y += h + 3; return t; } // on another page
       t.setY(y); P.add(t); y += h + 3; n++; return t;
     };
-    if (i === 0) {
+    if (i === 6) {
+      const es = endSummary(store.mission!, r);
+      line(`YOUR MISSION IS MOST LIKE ${es.like.toUpperCase()}`, C.gold2);
+      line(es.likeWhy, C.white);
+      y += 4; line(es.outcome, r.outcome === 'FULL_SUCCESS' ? C.green : r.outcome === 'MISSION_LOST' ? C.red : C.orange);
+      if (es.margin) line(es.margin, C.white);
+      if (es.costliest) line(`Costliest call: ${es.costliest}`, C.orange);
+      if (es.extra) line(es.extra, C.white);
+    } else if (i === 0) {
       line('SCIENTIFIC ACHIEVEMENTS', C.gold2);
       if (!r.science.length) line('No science returned.', C.dim);
       for (const sc of r.science) { line(`• ${sc.label}: +${sc.points.toFixed(1)}`, C.white); if (sc.detail) line(sc.detail, C.dim, 8); }
@@ -119,6 +130,7 @@ export class ReportScene extends Phaser.Scene {
       for (const l of r.lessons) line(`• ${l}`, C.teal);
     } else if (i === 4) {
       line('MISSION HISTORY (this device)', C.gold2);
+      if (this.prevNote) line(this.prevNote, C.teal);
       for (const h of store.history.slice(0, 9)) line(`${h.score.toString().padStart(3)} ${h.grade}  ${h.outcome.slice(0, 18).padEnd(18)} ${h.site}, ${h.lv}`, C.white);
     } else {
       line('CREDITS', C.gold2);

@@ -34,10 +34,12 @@ async function eva(p: Page, row: number, id: string) {
   expect((await surface(p))!.done[id]).toBe(before + 1);
   await p.waitForTimeout(1600); // the scene stays busy 1.3 s after each activity
 }
-/** The Calculation Desk sits between the hangar and the review: Enter moves on through every sheet and the board. */
+/** The Calculation Desk sits between the hangar and the review. */
 async function throughDesk(p: Page) {
   await waitScene(p, 'Desk');
-  for (let i = 0; i < 20 && !(await hooks(p)).includes('Review'); i++) { await p.keyboard.press('Enter'); await p.waitForTimeout(350); }
+  // S skips a sheet (the desk reveals steps one at a time); on the results board Enter launches
+  for (let i = 0; i < 16; i++) { await p.keyboard.press('s'); await p.waitForTimeout(150); }
+  for (let i = 0; i < 10 && !(await hooks(p)).includes('Review'); i++) { await p.keyboard.press('Enter'); await p.waitForTimeout(400); }
 }
 /** True while an emergency window (or its mission-control result) is open. */
 const emergencyOpen = (p: Page) => p.evaluate(() => (window as unknown as { __ottm: { emergencyOpen: () => boolean } }).__ottm.emergencyOpen());
