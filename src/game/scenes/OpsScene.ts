@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, chapterCard, crt, fadeIn, fadeTo, fmtTime, gearButton, iconFrame, Meter, modal, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
@@ -109,6 +110,7 @@ export class OpsScene extends Phaser.Scene {
     this.controls = this.add.container(0, 0);
     this.logText = txt(this, 246, 242, '', { color: C.dim, maxWidth: 228 }).setVisible(false); // replaced by logBox
     this.logShown = ''; this.logBox = null;
+    learned(this, 'resources', 2500); // D1: fuel, power, oxygen, water and data in flight
     gearButton(this);
     crt(this);
     this.input.keyboard?.on('keydown-SPACE', () => this.setSpeed(this.speed === 0 ? 1 : 0));

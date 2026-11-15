@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { WHAT_YOULL_LEARN } from '../../data/learningGoals';
 import { audio } from '../audio/audio';
 import { Button, C, crt, Dialogue, fadeIn, fadeTo, gearButton, H, txt, W } from '../ui/ui';
 import { BUDGET_M } from '../../simulation/constants';
@@ -37,6 +38,8 @@ export class BriefingScene extends Phaser.Scene {
       { who: 'Director Cole', text: 'The plan: a rocket sends the stack toward the Moon. The service module brakes into lunar orbit, the lander takes two crew down and back up, then the service module burns for home.', portrait: 'portrait_director' },
       { who: 'Director Cole', text: `You have $${(BUDGET_M / 1000).toFixed(1)} billion. Every kilogram must be pushed by propellant, and propellant is itself mass. Watch your Δv margin.`, portrait: 'portrait_director' },
       { who: 'CAPCOM Sam', text: 'We will be on the radio the whole way, Commander. Build it right and we will bring you home.', portrait: 'portrait_capcom' },
+      { who: 'Director Cole', text: 'The goal: land, bring home 50 science points, and keep the crew safe. Every part you pick must serve that goal.', portrait: 'portrait_director' },
+      { who: 'Director Cole', text: WHAT_YOULL_LEARN, portrait: 'portrait_director' },
     ], () => this.go());
     this.events.on('update', () => undefined);
     new Button(this, 4, 4, 'SKIP ▶', () => this.go(), { w: 46 }).setDepth(1200);

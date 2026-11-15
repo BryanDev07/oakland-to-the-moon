@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, crt, fadeIn, fadeTo, gearButton, modal, modalState, onceKey, panel, txt, W, H } from '../ui/ui';
@@ -144,7 +145,10 @@ export class DeskScene extends Phaser.Scene {
       return;
     }
     audio.sfx('select');
-    if (this.shown <= sh.steps.length) { this.shown++; this.feedback = ''; }
+    if (this.shown <= sh.steps.length) {
+      this.shown++; this.feedback = '';
+      if (this.shown > sh.steps.length) { if (sh.n <= 2) learned(this, 'weight'); if (sh.n === 5) learned(this, 'far'); } // D1
+    }
     else { this.nextSheet(); return; }
     this.saveProgress();
     this.render();

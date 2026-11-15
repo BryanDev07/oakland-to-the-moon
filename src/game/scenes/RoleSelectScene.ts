@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, crt, fadeIn, fadeTo, gearButton, onceKey, txt, W } from '../ui/ui';
@@ -69,6 +70,7 @@ export class RoleSelectScene extends Phaser.Scene {
     gearButton(this);
     crt(this);
     this.refresh();
+    learned(this, 'goal', 700); // D1: the briefing set the goal
     this.input.once('pointerdown', () => audio.unlock());
   }
 

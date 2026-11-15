@@ -7,6 +7,7 @@
  * option. Keys: Up/Down to move, Enter to choose, 1-4 to choose directly.
  */
 import Phaser from 'phaser';
+import { learned } from './learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, Dialogue, onceKey, panel, pinToScreen, txt, W, H } from './ui';
@@ -90,6 +91,7 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
     c.destroy();
     if (canFix && !armed && i === ev!.options.length) { showEmergency(scene, s, onDone, true); return; }
     const msg = Sim.resolveEvent(s, i, armed);
+    learned(scene, 'pressure', 300); // D1
     store.saveMission();
     if (ev!.fdPick === undefined) { done(); return; } // legacy event: the caller shows its own toast
     // Mission Control's answer in a paged dialogue box at the edge away from the action (A1)

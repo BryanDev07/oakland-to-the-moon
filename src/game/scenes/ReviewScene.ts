@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, iconFrame, kg, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
@@ -71,6 +72,7 @@ export class ReviewScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ENTER', () => { if (r.go) this.poll(); });
     gearButton(this);
     crt(this);
+    learned(this, 'margins', 900); // D1: the review checks every margin
     if (!store.seen.reviewCard) { chapterCard(this, 3, 'COUNTDOWN'); store.markSeen('reviewCard'); }
     if (!r.go) this.time.delayedCall(store.seen.reviewCard ? 300 : 2400, () => toast(this, 'Flight Director', hardMode ? 'We are NO-GO. Red items are blocking: click each to see what failed.' : 'We are NO-GO. Red items are blocking. Click each for the fix, then head back to the hangar.', 'portrait_director', 6000));
   }

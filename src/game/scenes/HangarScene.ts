@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, icon, iconFrame, kg, Meter, modal, modalState, onceKey, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
@@ -140,6 +141,7 @@ export class HangarScene extends Phaser.Scene {
     this.undo.push(JSON.stringify(this.design));
     if (this.undo.length > 50) this.undo.shift();
     mut(this.design);
+    learned(this, 'tradeoff', 400); // D1: every change moves cost, weight, risk and science together
     store.design = cloneDesign(this.design);
     store.saveDesign();
     this.view.build(this.design);
@@ -241,6 +243,7 @@ export class HangarScene extends Phaser.Scene {
   listPage = 0; // option list page (A3: rows that do not fit go onto pages, never under the detail box)
   selectCat(c: Cat) {
     if (c !== this.cat) this.listPage = 0;
+    if (c === 'style') learned(this, 'orbits'); // D1
     this.cat = c;
     Tooltip.hide();
     this.view.highlight(null);
