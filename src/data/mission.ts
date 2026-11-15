@@ -48,13 +48,13 @@ export interface LandingSite {
 export const SITES: LandingSite[] = [
   { id: 'equator', name: 'Sea of Tranquility', short: 'Tranquility', dvLoi: 900, dvTei: 950, dvDescent: 2250, scienceMult: 1.0, surfaceCommAvailability: 1, landerHeaterW: 0, hazardDensity: 0.25,
     desc: 'Flat volcanic plain near the equator. Easy to reach, Earth always overhead.',
-    learn: 'Equatorial near-side sites need the least Δv and have continuous Earth contact.', special: 'regolith' },
+    learn: 'Flat near-side plains are the safest place to land and keep Earth overhead for radio.', special: 'regolith' },
   { id: 'marius', name: 'Marius Hills Skylight', short: 'Marius Hills', dvLoi: 930, dvTei: 980, dvDescent: 2280, scienceMult: 1.3, surfaceCommAvailability: 1, landerHeaterW: 0, hazardDensity: 0.45,
     desc: 'Volcanic domes and a pit opening into a lava tube. Rougher terrain.',
     learn: 'Lava tubes could shelter future bases from radiation and temperature extremes.', special: 'skylight' },
   { id: 'pole', name: 'Shackleton Rim (South Pole)', short: 'South Pole', dvLoi: 1050, dvTei: 1100, dvDescent: 2320, scienceMult: 1.6, surfaceCommAvailability: 0.55, landerHeaterW: 250, hazardDensity: 0.6,
     desc: 'Rugged rim near craters that may hold water ice. Earth low on the horizon.',
-    learn: 'Polar orbits cost extra Δv; low Earth elevation blocks the radio link part of the time; ice is the prize.', special: 'ice' },
+    learn: 'Ice is the prize, but the rim is rough, Earth sits low (the radio drops out) and the lander needs heaters. Real polar missions also pay extra Δv to reach a polar orbit; this game leaves that out: your lunar orbit choice sets the Δv.', special: 'ice' },
 ];
 
 export interface Tempo { id: 'conservative' | 'balanced' | 'aggressive'; name: string; evaHoursPerDay: number; reserveDays: number; stressPerDay: number; desc: string }

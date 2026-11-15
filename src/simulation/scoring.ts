@@ -153,7 +153,7 @@ export function evaluate(s: MissionState): MissionReport {
   if (!s.stats.parts.some((p) => p.slot === 'science')) recs.push('Fly at least one science instrument: science is 30% of the score.');
   if (sciencePoints < 40 && returned) recs.push('Spend more EVA time on high-value activities, or pick a higher-value landing site.');
   lessons.push('Systems engineering: every choice (mass, power, data, budget) affects every other subsystem.');
-  if (s.design.plan.site === 'pole') lessons.push('Polar sites offer ice, but cost more Δv and limit communications.');
+  if (s.design.plan.site === 'pole') lessons.push('Polar sites offer ice, but rough ground makes landing harder and a low Earth horizon limits communications.');
   if (!recs.length) recs.push('Try a more ambitious site or a leaner design to raise your score.');
 
   const engineeringGrade = letter(engineering * 100);

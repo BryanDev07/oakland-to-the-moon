@@ -122,7 +122,7 @@ export const DESIGN_CARDS: DesignCard[] = [
   {
     id: 'sci2', role: 'science', when: 'design2', title: 'LANDING SITE',
     text: (d) => `Planned site: ${SITE_BY_ID[d.plan.site].name}.`,
-    tip: ['As Science Lead: the best science is often in the hardest places.', 'As Science Lead: flat sites are safe; rough ones hold more science.', 'Science: site Δv and hazard vs science value.'],
+    tip: ['As Science Lead: the best science is often in the hardest places.', 'As Science Lead: flat sites are safe; rough ones hold more science.', 'Science: landing hazard and radio contact vs science value.'],
     options: [
       { label: 'Safer flat site (Tranquility)', good: () => 'Flat ground: an easier landing.', bad: () => 'Less science than the poles or skylights.', apply: (d) => { d.plan.site = 'equator'; } },
       { label: 'Science-rich site (South Pole)', good: () => 'Ice and old rock: more science.', bad: () => 'Rough ground and more speed to get down.', apply: (d) => { d.plan.site = 'pole'; } },
