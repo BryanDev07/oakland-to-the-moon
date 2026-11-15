@@ -14,6 +14,7 @@ import * as Sim from '../../simulation/mission';
 import type { MissionState } from '../../simulation/types';
 import { specOf } from '../../simulation/specModel';
 import { roleOf } from '../../data/roles';
+import { realEventLine } from '../../data/cardSources';
 
 /** True while an emergency (or its mission-control result) is on screen. */
 export const emergencyUI = { open: false };
@@ -42,6 +43,8 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
   c.add(txt(scene, W / 2, y, ev.title, { align: 'center', color: C.gold2, size: BODY, maxWidth: w })); y += 18;
   // spec tab 8: cards 3, 6, 9, 10, 14, 15 are scenarios; card 13 is a real effect (contact lost behind the Moon)
   if (ev.stage) line(`${ev.stage}  ·  ${ev.real ? 'This really happened' : ev.scenario ? 'Scenario (made up, realistic)' : 'Real effect'}`, COL.tag);
+  const realLine = ev.real ? realEventLine(ev.id) : null; // A6: the real event in one line, with its source
+  if (realLine) line(realLine, COL.tag);
   const body = line(ev.text, COL.text, 3);
   if (ev.hint) line(`Hint: ${ev.hint}`, COL.hint, 3);
   // options, then the highlighted option's Good / Bad lines
