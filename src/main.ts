@@ -48,6 +48,25 @@ window.__ottm = {
   audio,
   debug,
   emergencyOpen: () => emergencyUI.open,
+  /** A3: visible text that runs past the screen or was cut off with an ellipsis, in the active scenes. */
+  textOverflow: () => {
+    const bad: string[] = [];
+    const walk = (o: Phaser.GameObjects.GameObject, sc: Phaser.Scene) => {
+      if (o instanceof Phaser.GameObjects.Container) { if (o.visible && o.alpha > 0) o.list.forEach((c) => walk(c, sc)); return; }
+      if (!(o instanceof Phaser.GameObjects.BitmapText) || !o.visible || o.alpha === 0 || !o.text.trim()) return;
+      let p: Phaser.GameObjects.Container | null = o.parentContainer, hidden = false;
+      let sf: { scrollFactorX: number; scrollFactorY: number } = o;
+      while (p) { if (!p.visible || p.alpha === 0) hidden = true; sf = p; p = p.parentContainer; } // the outermost container's scroll factor wins
+      if (hidden) return;
+      const b = o.getBounds(), cam = sc.cameras.main;
+      const x = b.x - cam.scrollX * sf.scrollFactorX, y = b.y - cam.scrollY * sf.scrollFactorY;
+      if (y < -500) return; // measuring probes
+      const out = x < -1 || y < -1 || x + b.width > cam.width + 1 || y + b.height > cam.height + 1;
+      if (out || /…$/.test(o.text)) bad.push(`${sc.scene.key}: "${o.text.slice(0, 60)}" at ${Math.round(x)},${Math.round(y)} ${Math.round(b.width)}x${Math.round(b.height)}`);
+    };
+    for (const sc of game.scene.getScenes(true)) sc.children.list.forEach((o) => walk(o, sc));
+    return bad;
+  },
   scene: () => game.scene.getScenes(true).map((s) => s.scene.key),
   goto: (key: string, data?: object) => {
     for (const s of game.scene.getScenes(true)) if (s.scene.key !== key) game.scene.stop(s.scene.key);

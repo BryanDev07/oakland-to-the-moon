@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, icon, iconFrame, kg, Meter, modal, modalState, onceKey, panel, toast, Tooltip, txt, W } from '../ui/ui';
+import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, icon, iconFrame, kg, Meter, modal, modalState, onceKey, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
 import { SpacecraftView } from '../components/SpacecraftView';
 import { COMPONENT_BY_ID, Component, componentsInSlot, SLOTS, SlotId } from '../../data/components';
 import { cloneDesign, Design, LAUNCH_VEHICLES, REFERENCE_DESIGN, SITES, TEMPOS, LV_BY_ID, SITE_BY_ID } from '../../data/mission';
@@ -235,7 +235,9 @@ export class HangarScene extends Phaser.Scene {
     const v = list[(list.indexOf(cur) + d + list.length) % list.length];
     this.change(() => { this.design.spec = { ...specOf(this.design), [keys[this.styleRow]]: v } as SpecDesign; });
   }
+  listPage = 0; // option list page (A3: rows that do not fit go onto pages, never under the detail box)
   selectCat(c: Cat) {
+    if (c !== this.cat) this.listPage = 0;
     this.cat = c;
     Tooltip.hide();
     this.view.highlight(null);
@@ -253,9 +255,18 @@ export class HangarScene extends Phaser.Scene {
     if (this.cat === 'style') { this.renderStyle(); return; }
     const slot = SLOTS.find((s) => s.id === this.cat)!;
     R.add(txt(this, 400, 7, slot.label.toUpperCase(), { align: 'center', color: C.gold }));
-    R.add(txt(this, x0 + 2, 18, slot.multi ? 'Choose any (click to toggle)' : 'Choose one', { color: C.dim }));
-    const opts = componentsInSlot(this.cat as SlotId);
-    const ch = opts.length > 4 ? 24 : 30;
+    R.add(txt(this, x0 + 2, 18, slot.multi ? 'Choose any' : 'Choose one', { color: C.dim }));
+    const all = componentsInSlot(this.cat as SlotId);
+    const ch = all.length > 4 ? 22 : 30;
+    const per = Math.floor((152 - 28) / (ch + 2)); // rows that fit above the detail box
+    const pages = Math.max(1, Math.ceil(all.length / per));
+    this.listPage = Math.min(this.listPage, pages - 1);
+    const opts = all.slice(this.listPage * per, this.listPage * per + per);
+    if (pages > 1) {
+      const pg = txt(this, x0 + 146, 18, `< ${this.listPage + 1}/${pages} >`, { align: 'right', color: C.teal });
+      pg.setInteractive({ useHandCursor: true }).on('pointerup', () => { this.listPage = (this.listPage + 1) % pages; audio.sfx('move'); this.renderRight(); });
+      R.add(pg);
+    }
     opts.forEach((comp, i) => {
       const y = 28 + i * (ch + 2);
       const selected = slot.multi ? (this.cat === 'science' ? this.design.science : this.design.safety).includes(comp.id) : this.design.slots[this.cat] === comp.id;
@@ -266,7 +277,7 @@ export class HangarScene extends Phaser.Scene {
       R.add(txt(this, x0 + 18, y + 4, comp.short, { color: selected ? C.gold2 : C.white }));
       R.add(txt(this, x0 + 144, y + 4, `$${comp.costM}M`, { align: 'right', color: C.dim }));
       const metric = this.metricLine(comp);
-      R.add(txt(this, x0 + 18, y + (ch > 26 ? 16 : 13), metric, { color: C.blue }));
+      R.add(txt(this, x0 + 18, y + (ch > 26 ? 16 : 12), metric, { color: C.blue }));
       card.on('pointerover', () => { audio.sfx('move'); this.showDetail(comp); this.view.highlight(selected ? comp.id : null); });
       card.on('pointerout', () => this.view.highlight(null));
       card.on('pointerup', () => this.pick(comp, slot.multi ?? false, selected));
@@ -339,9 +350,8 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
     const swap = lines.length ? txt(this, 328, y0 + 10, lines.join('\n'), { maxWidth: 144, color: C.orange }) : null;
     if (swap) D.add(swap);
     const top = y0 + 10 + (swap ? swap.height + 1 : 0);
-    const body = txt(this, 328, top, `${engine.trim() ? engine.trim() + '\n' : ''}${comp.desc}`, { maxWidth: 144, color: C.white, size: 15 });
-    D.add(body);
-    while (top + body.height > 212 && body.text.length > 12) body.setText(body.text.replace(/\s*\S+…?$/, '…'));
+    // never clip (A3): long descriptions page inside the box (click "1/2 >")
+    D.add(pagedText(this, 328, top, 144, 212 - top, `${engine.trim() ? engine.trim() + '\n' : ''}${comp.desc}`, { color: C.white, size: 15 }));
     // educational note (hover for full), on the title line
     const learnBtn = txt(this, 472, y0, '▶ WHY', { color: C.teal, align: 'right' });
     learnBtn.setInteractive({ useHandCursor: true });
@@ -418,9 +428,7 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
   planDetail(text: string) {
     this.detail.removeAll(true);
     this.detail.add(this.add.rectangle(326, 155, 148, 1, C.gold, 0.6).setOrigin(0, 0));
-    const t = txt(this, 328, 158, text, { maxWidth: 144, color: C.white, size: 15 });
-    while (158 + t.height > 212 && t.text.length > 12) t.setText(t.text.replace(/\s*\S+…?$/, '…')); // never clip
-    this.detail.add(t);
+    this.detail.add(pagedText(this, 328, 158, 144, 54, text, { color: C.white, size: 15 })); // never clip: pages
   }
 
   hint() {

@@ -261,4 +261,31 @@ test.describe('Oakland to the Moon', () => {
     await page.keyboard.press('Escape');
     expect(errors).toEqual([]);
   });
+
+  test('no text runs past the screen or is cut off (hangar, desk, coast, landing)', async ({ page }) => {
+    type O = { __ottm: { textOverflow(): string[]; goto(k: string, d?: object): void; debug: { useReferenceDesign(): void; newMission(n: number): void; advanceTo(p: string): void }; store: { markSeen(k: string): void }; game: { scene: { getScene(k: string): { catRows?: { cat: string }[]; selectCat?(c: string): void } } } } };
+    const over = () => page.evaluate(() => (window as unknown as O).__ottm.textOverflow());
+    const found: string[] = [];
+    const check = async () => { for (const b of await over()) if (!found.includes(b)) found.push(b); };
+    await page.goto('/');
+    await waitScene(page, 'Title');
+    await page.evaluate(() => { const o = (window as unknown as O).__ottm; o.debug.useReferenceDesign(); for (let i = 1; i < 9; i++) o.store.markSeen('chap' + i); o.goto('Hangar'); });
+    await waitScene(page, 'Hangar');
+    const cats = await page.evaluate(() => (window as unknown as O).__ottm.game.scene.getScene('Hangar').catRows!.map((r) => r.cat));
+    for (const c of cats) { await page.evaluate((c) => (window as unknown as O).__ottm.game.scene.getScene('Hangar').selectCat!(c), c); await page.waitForTimeout(120); await check(); }
+    await page.evaluate(() => (window as unknown as O).__ottm.goto('Desk'));
+    await waitScene(page, 'Desk');
+    for (let sheet = 0; sheet < 15; sheet++) {
+      for (let k = 0; k < 6; k++) { await page.keyboard.press('Enter'); await page.waitForTimeout(40); await check(); }
+      await page.keyboard.press('s'); await page.waitForTimeout(80);
+    }
+    for (let k = 0; k < 6; k++) { await check(); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(80); }
+    await page.evaluate(() => { const o = (window as unknown as O).__ottm; o.debug.newMission(221); o.goto('Ops'); });
+    await waitScene(page, 'Ops');
+    for (let i = 0; i < 6; i++) { await check(); await page.waitForTimeout(400); }
+    await page.evaluate(() => { const o = (window as unknown as O).__ottm; o.debug.newMission(221); o.debug.advanceTo('DESCENT'); o.goto('Landing'); });
+    await waitScene(page, 'Landing');
+    for (let i = 0; i < 4; i++) { await check(); await page.waitForTimeout(500); }
+    expect(found).toEqual([]);
+  });
 });

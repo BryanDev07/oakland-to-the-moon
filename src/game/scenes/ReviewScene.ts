@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, iconFrame, kg, panel, toast, Tooltip, txt, W } from '../ui/ui';
+import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, iconFrame, kg, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
 import { reviewDesign, ReviewCheck, ReviewResult } from '../../simulation/review';
 import { COMPONENT_BY_ID } from '../../data/components';
 import { LV_BY_ID, SITE_BY_ID, TEMPO_BY_ID } from '../../data/mission';
@@ -84,10 +84,9 @@ export class ReviewScene extends Phaser.Scene {
     D.add(st); y += st.height + 2;
     // 15 px, trimmed to the panel; hover the panel for everything
     const full = `${c.detail}${c.fix ? `\nFIX: ${c.fix}` : ''}${c.culprits.length ? `\nInvolved: ${c.culprits.map((id) => COMPONENT_BY_ID[id]?.short ?? id).join(', ')}` : ''}`;
-    const body = txt(this, 314, y, c.fix && c.status !== 'pass' ? `FIX: ${c.fix}` : c.detail, { maxWidth: 156, color: c.fix && c.status !== 'pass' ? C.teal : C.white, size: 15 });
-    while (y + body.height > 236 && body.text.length > 12) body.setText(body.text.replace(/\s*\S+…?$/, '…'));
-    D.add(body);
-    const hit = this.add.rectangle(310, 120, 164, 116, 0, 0).setOrigin(0, 0).setInteractive();
+    const fixFirst = c.fix && c.status !== 'pass';
+    D.add(pagedText(this, 314, y, 156, 236 - y, fixFirst ? `FIX: ${c.fix}\n${c.detail}` : c.detail, { color: fixFirst ? C.teal : C.white, size: 15 })); // never clip: pages
+    const hit = this.add.rectangle(310, 120, 164, 104, 0, 0).setOrigin(0, 0).setInteractive();
     hit.on('pointerover', () => Tooltip.show(this, full, { x: 20, y: 30, abs: true }));
     hit.on('pointerout', () => Tooltip.hide());
     D.add(hit);

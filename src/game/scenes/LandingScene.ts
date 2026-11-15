@@ -94,7 +94,7 @@ export class LandingScene extends Phaser.Scene {
     hb(4, '◀ TILT', 'left', 46); hb(52, 'THRUST', 'up', 52); hb(106, 'TILT ▶', 'right', 46);
     this.autoBtn = new Button(this, W - 120, H - 24, 'AUTOPILOT', () => this.setAuto(!this.auto), { w: 66, h: 20, tooltip: 'Let the guidance computer fly (key A)' }).setScrollFactor(0) as Button;
     new Button(this, W - 52, H - 24, 'ABORT', () => this.abort(), { w: 48, h: 20, tooltip: 'Fire the ascent stage back to orbit (key X)' }).setScrollFactor(0);
-    txt(this, 80, H - 36, '↑/W/SPACE thrust  ↓/S less  ← → tilt', { align: 'center', color: C.dim }).setScrollFactor(0);
+    txt(this, 94, H - 36, '↑/W/SPACE thrust  ↓/S less  ← → tilt', { align: 'center', color: C.dim }).setScrollFactor(0);
     this.keys = this.input.keyboard!.addKeys('UP,DOWN,LEFT,RIGHT,W,S,A,D,SPACE,X') as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.keyboard?.on('keydown-A', () => this.started && this.setAuto(!this.auto));
     this.input.keyboard?.on('keydown-X', () => this.abort());

@@ -119,7 +119,8 @@ export function applySpecReview(d: Design, s: DesignStats, checks: ReviewCheck[]
   const risky = S.risks.filter((r) => r.now !== 'Low');
   checks.push({
     id: 'risk', title: 'Material + fuel risks', icon: 'warn', status: risky.length ? 'warn' : 'pass',
-    value: risky.length ? risky.map((r) => `${r.combo}: ${r.now}`).join('; ') : `Tank risk ${S.tankRisk}`,
+    // short enough for the review row (A3); the detail lists every combo
+    value: risky.length ? `${(['High', 'Medium', 'Low'] as const).find((l) => risky.some((r) => r.now === l)) ?? risky[0].now} risk, ${risky.length} combo${risky.length > 1 ? 's' : ''}` : `Tank risk ${S.tankRisk}`,
     detail: risky.length ? risky.map((r) => `${r.stage}, ${r.combo} (${r.now}): ${r.why}`).join(' ') : 'No risky material + fuel combos.',
     fix: risky.length ? risky.map((r) => r.fix).join(' ') : undefined,
     culprits: [],

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, chapterCard, crt, fadeIn, fadeTo, fmtTime, gearButton, iconFrame, Meter, modal, panel, toast, Tooltip, txt, W } from '../ui/ui';
+import { Button, C, chapterCard, crt, fadeIn, fadeTo, fmtTime, gearButton, iconFrame, Meter, modal, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
 import { SpacecraftView } from '../components/SpacecraftView';
 import * as Sim from '../../simulation/mission';
 import { COMPONENT_BY_ID } from '../../data/components';
@@ -31,6 +31,7 @@ export class OpsScene extends Phaser.Scene {
   burnFlame!: Phaser.GameObjects.Sprite;
   traj!: Phaser.GameObjects.Graphics;
   meters: Record<string, Meter> = {};
+  logShown = ''; logBox: Phaser.GameObjects.Container | null = null;
   phaseText!: Phaser.GameObjects.BitmapText; clockText!: Phaser.GameObjects.BitmapText; nextText!: Phaser.GameObjects.BitmapText; logText!: Phaser.GameObjects.BitmapText; linkText!: Phaser.GameObjects.BitmapText;
   speedBtns: Button[] = [];
   controls!: Phaser.GameObjects.Container;
@@ -106,7 +107,8 @@ export class OpsScene extends Phaser.Scene {
       this.speedBtns.push(b);
     });
     this.controls = this.add.container(0, 0);
-    this.logText = txt(this, 246, 242, '', { color: C.dim, maxWidth: 228 });
+    this.logText = txt(this, 246, 242, '', { color: C.dim, maxWidth: 228 }).setVisible(false); // replaced by logBox
+    this.logShown = ''; this.logBox = null;
     gearButton(this);
     crt(this);
     this.input.keyboard?.on('keydown-SPACE', () => this.setSpeed(this.speed === 0 ? 1 : 0));
@@ -356,7 +358,12 @@ export class OpsScene extends Phaser.Scene {
     const rate = Sim.linkRateMbps(s);
     this.linkText.setText(`LINK ${rate > 0 ? fmt(rate * 1000) + ' kbps' : 'DOWN'} • LOST ${(s.lostMB / 1000).toFixed(0)} GB`).setTint(rate > 0 ? C.dim : C.orange);
     const last = s.log[s.log.length - 1];
-    if (last) this.logText.setText(last.text.length > 84 ? last.text.slice(0, 82) + '…' : last.text).setTint(last.kind === 'bad' || last.kind === 'event' ? C.red : last.kind === 'warn' ? C.orange : last.kind === 'good' ? C.green : C.dim);
+    if (last && last.text !== this.logShown) {
+      // never clip (A3): the latest log line pages inside its strip, turning every 3 s
+      this.logShown = last.text;
+      this.logBox?.destroy();
+      this.logBox = pagedText(this, 246, 242, 228, 24, last.text, { color: last.kind === 'bad' || last.kind === 'event' ? C.red : last.kind === 'warn' ? C.orange : last.kind === 'good' ? C.green : C.text, autoMs: 3000 });
+    }
     // contextual coaching (once each)
     const once = (k: string, cond: boolean, who: string, text: string) => { if (cond && !this.said[k]) { this.said[k] = true; toast(this, who, text, 'portrait_capcom', 6000); } };
     once('shadow', p.genW === 0 && s.stats.power.genKind === 'solar' && Sim.inLunarOrbit(s), 'CAPCOM Sam', 'You are in the Moon\'s shadow: the arrays make nothing, the battery carries every watt. ~47 minutes of every 2-hour orbit.');

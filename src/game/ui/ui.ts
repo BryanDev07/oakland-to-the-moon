@@ -26,6 +26,43 @@ export function txt(scene: Phaser.Scene, x: number, y: number, s: string, o: Txt
   return t;
 }
 
+/**
+ * Text that never clips (A3): wrapped to w and split into pages that fit maxH. With more than one page
+ * a small "1/2 >" counter appears at the bottom right (click it, or pages turn every autoMs).
+ */
+export function pagedText(scene: Phaser.Scene, x: number, y: number, w: number, maxH: number, text: string, o: TxtOpts & { autoMs?: number } = {}): Phaser.GameObjects.Container {
+  const c = scene.add.container(0, 0);
+  const t = txt(scene, x, y, '', { ...o, maxWidth: w });
+  c.add(t);
+  const split = (room: number) => {
+    const out: string[] = [];
+    let cur = '';
+    for (const tok of text.split(/(\n| )/)) {
+      if (tok === ' ' && !cur) continue;
+      const next = cur + tok;
+      t.setText(next.trimEnd());
+      if (t.height > room && cur.trim()) { out.push(cur.trimEnd()); cur = tok === ' ' || tok === '\n' ? '' : tok; } else cur = next;
+    }
+    if (cur.trim()) out.push(cur.trimEnd());
+    return out.length ? out : [''];
+  };
+  let pages = split(maxH);
+  if (pages.length > 1) pages = split(maxH - 11); // leave room for the page counter
+  let i = 0;
+  const counter = pages.length > 1 ? txt(scene, x + w, y + maxH - 10, '', { align: 'right', color: C.teal }) : null;
+  const show = () => { t.setText(pages[i]); counter?.setText(`${i + 1}/${pages.length} >`); };
+  show();
+  if (counter) {
+    c.add(counter);
+    counter.setInteractive({ useHandCursor: true }).on('pointerup', () => { i = (i + 1) % pages.length; show(); });
+    if (o.autoMs) {
+      const ev = scene.time.addEvent({ delay: o.autoMs, loop: true, callback: () => { i = (i + 1) % pages.length; show(); } });
+      c.once('destroy', () => ev.remove(false));
+    }
+  }
+  return c;
+}
+
 export function panel(scene: Phaser.Scene, x: number, y: number, w: number, h: number, key = 'panel'): Phaser.GameObjects.NineSlice {
   const p = scene.add.nineslice(Math.round(x), Math.round(y), key, undefined, Math.round(w), Math.round(h), 8, 8, 8, 8);
   p.setOrigin(0, 0);
