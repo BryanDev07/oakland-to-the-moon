@@ -54,9 +54,12 @@ export class DeskScene extends Phaser.Scene {
     this.side = this.add.container(0, 0);
     this.input.keyboard?.on('keydown', onceKey((e: KeyboardEvent) => {
       if (modalState.open) return; // the worked-example popup has the keys
-      if (/^[0-9.]$/.test(e.key)) this.key(e.key);
-      else if (e.key === '+') this.key('+');
-      else if (e.key === 'Backspace') this.key('<');
+      // A4: main-row digits and the number pad (works with Num Lock off too)
+      const np = /^Numpad(\d)$/.exec(e.code)?.[1] ?? (e.code === 'NumpadDecimal' ? '.' : e.code === 'NumpadAdd' ? '+' : null);
+      const k = np ?? e.key;
+      if (/^[0-9.]$/.test(k)) { this.toAddStep(); this.key(k); }
+      else if (k === '+') this.key('+');
+      else if (e.key === 'Backspace' || e.key === 'Delete') this.key('<');
       else if (e.key === 'ArrowRight' && this.onBoard()) { this.boardPage++; this.render(); } // board: turn the page
       else if (e.key === 'Enter' || e.key === 'ArrowRight') this.advance();
       else if (e.key === 'ArrowLeft') this.prevSheet();
@@ -91,6 +94,15 @@ export class DeskScene extends Phaser.Scene {
   }
 
   // ------------------------------------------------------------------ input
+  /** Typing a number before the sheet's addition is shown jumps straight to it (A4). */
+  toAddStep() {
+    const sh = this.sheet;
+    if (!sh || this.pendingAdd()) return;
+    const i = sh.steps.findIndex((st, k) => st.kind === 'add' && this.vals[k] === null);
+    if (i < 0 || i < this.shown - 1) return;
+    this.shown = i + 1; this.feedback = '';
+    this.saveProgress();
+  }
   key(k: string) {
     if (!this.pendingAdd()) return;
     audio.sfx('move');
