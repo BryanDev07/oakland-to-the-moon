@@ -1,7 +1,9 @@
 import { expect, test, Page } from '@playwright/test';
 import fs from 'node:fs';
 
-const SHOTS = 'docs/screenshots';
+// Screenshots go to the git-ignored test-results/ folder, so a normal test run never changes tracked
+// files. `npm run screenshots` sets SHOTS_DIR=docs/screenshots to refresh the README images.
+const SHOTS = process.env.SHOTS_DIR ?? 'test-results/screenshots';
 fs.mkdirSync(SHOTS, { recursive: true });
 
 type Hooks = { scene: () => string[]; store: { mission: { phase: string; pending: unknown } | null; history: { score: number; outcome: string }[] }; game: { loop: { actualFps: number } } };
@@ -274,6 +276,62 @@ test.describe('Oakland to the Moon', () => {
     await waitScene(page, 'Overlay');
     await page.screenshot({ path: `${SHOTS}/17-settings-overlay.png` });
     await page.keyboard.press('Escape');
+    expect(errors).toEqual([]);
+  });
+
+  test('quick start opens the hangar with the starter design; NEW MISSION still plays the story', async ({ page }) => {
+    type O = { __ottm: { sceneLog: string[]; store: { mission: unknown; design: { plan: { lv: string }; spec: { difficulty: string; role: string; mission: string } } } } };
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto('/');
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await waitScene(page, 'Title');
+    // How to play, closed with Enter, must not start a mission
+    await click(page, 240, 128 + 2 * 21 + 9);
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(1200);
+    expect(await hooks(page)).toEqual(['Title']);
+    // Q opens the quick-start window; Enter confirms
+    await page.keyboard.press('q');
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: `${SHOTS}/18-quick-start.png` });
+    await page.keyboard.press('Enter');
+    await waitScene(page, 'Hangar');
+    const log = await page.evaluate(() => (window as unknown as O).__ottm.sceneLog);
+    expect(log).not.toContain('Intro');
+    expect(log).not.toContain('Briefing');
+    const d = await page.evaluate(() => (window as unknown as O).__ottm.store.design);
+    expect(d.spec).toMatchObject({ difficulty: 'easy', role: 'commander', mission: 'moon' });
+    expect(d.plan.lv).toBe('bayhawk'); // the starter design: too heavy for its rocket
+    expect(await page.evaluate(() => (window as unknown as O).__ottm.store.mission)).toBeNull();
+    // back to the title: NEW MISSION (Enter) still starts in Oakland
+    await page.reload();
+    await waitScene(page, 'Title');
+    await page.keyboard.press('Enter');
+    await waitScene(page, 'Intro');
+    expect(errors).toEqual([]);
+  });
+
+  test('a mission in progress survives a reload and CONTINUE resumes it', async ({ page }) => {
+    type O = { __ottm: { debug: { useReferenceDesign(): void; newMission(n: number): void; advanceTo(p: string): void }; store: { mission: { phase: string; t: number } | null } } };
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto('/');
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await waitScene(page, 'Title');
+    await page.evaluate(() => { const o = (window as unknown as O).__ottm; o.debug.useReferenceDesign(); o.debug.newMission(42); o.debug.advanceTo('LUNAR_ORBIT'); });
+    const before = await page.evaluate(() => (window as unknown as O).__ottm.store.mission!);
+    await page.reload();
+    await waitScene(page, 'Title');
+    const after = await page.evaluate(() => (window as unknown as O).__ottm.store.mission!);
+    expect(after.phase).toBe('LUNAR_ORBIT');
+    expect(after.t).toBe(before.t);
+    await page.keyboard.press('Enter'); // CONTINUE MISSION is the Enter action when a save exists
+    await waitScene(page, 'Ops');
+    expect(await phase(page)).toBe('LUNAR_ORBIT');
     expect(errors).toEqual([]);
   });
 
