@@ -8,7 +8,7 @@ ISS-era numbers (see `SOURCES.md`). Nothing here is NASA-validated.
 All simulation code lives in `src/simulation/` and uses SI units internally:
 mass kg, velocity m/s, time s, power W, energy Wh, data MB (megabytes), data rate Mbps (megabits/s).
 
-> **Spec model (JOSEPH_SPEC.md, `SPEC_MODEL = true` in `constants.ts`).** The numbers in sections
+> **Spec model (docs/JOSEPH_SPEC.md, `SPEC_MODEL = true` in `constants.ts`).** The numbers in sections
 > 1, 3, 6, 10 and 11 below describe the original model, which is kept behind that flag. With the
 > spec model on: the launch vehicle is a staged rocket that must reach 12,600 m/s (9,400 to Earth
 > orbit + 3,200 to the Moon) with liftoff TWR ≥ 1.2 (`stack.ts`); the crew capsule (Orion /
