@@ -95,7 +95,7 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
     store.saveMission();
     if (ev!.fdPick === undefined) { done(); return; } // legacy event: the caller shows its own toast
     // Mission Control's answer in a paged dialogue box at the edge away from the action (A1)
-    const top = ['Launch', 'Landing', 'Surface'].includes(scene.scene.key);
+    const top = ['Launch', 'Landing', 'Surface', 'Ops', 'Docking', 'Spacewalk'].includes(scene.scene.key); // clear of meters and time buttons
     const dlg = new Dialogue(scene, top ? 'top' : 'bottom');
     pinToScreen(dlg);
     dlg.setDepth(950);

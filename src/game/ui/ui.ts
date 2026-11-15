@@ -222,8 +222,8 @@ const SPEEDS = { slow: 22, normal: 45, fast: 90, instant: 100000 };
  * from the action). Long lines are split into pages (click / Enter for the next page); the box never grows.
  */
 export class Dialogue extends Phaser.GameObjects.Container {
-  static readonly H = 72; // 72 / 270: about a quarter of the screen
-  static readonly LINES = 3;
+  static readonly H = 62; // 62 / 270: under a quarter of the screen
+  static readonly LINES = 2;
   lines: Line[] = [];
   idx = 0;
   shown = 0;
@@ -280,6 +280,9 @@ export class Dialogue extends Phaser.GameObjects.Container {
     return pages.map((t) => ({ ...l, text: t }));
   }
   play(lines: Line[], done?: () => void) {
+    // one box at a time: close any toast now showing; queued toasts wait until this dialogue ends
+    const q = toastQueue(this.scene);
+    q.current?.destroy(); q.current = null; q.busy = true;
     this.lines = lines.flatMap((l) => this.paginate(l)); this.idx = 0; this.done = done; this.setVisible(true); this.showLine();
     return this;
   }
@@ -313,7 +316,11 @@ export class Dialogue extends Phaser.GameObjects.Container {
     if (this.typing) { this.finishTyping(); return; }
     audio.sfx('move');
     this.idx++;
-    if (this.idx >= this.lines.length) { this.setVisible(false); const d = this.done; this.done = undefined; d?.(); return; }
+    if (this.idx >= this.lines.length) {
+      this.setVisible(false);
+      const q = toastQueue(this.scene); q.busy = false; const nxt = q.queue.shift(); if (nxt) this.scene.time.delayedCall(300, nxt);
+      const d = this.done; this.done = undefined; d?.(); return;
+    }
     this.showLine();
   }
 }
@@ -410,34 +417,71 @@ export function pinToScreen<T extends Phaser.GameObjects.Container>(c: T): T {
 }
 
 // ----------------------------------------------------------------- Toast (mission control message)
-export function toast(scene: Phaser.Scene, who: string, text: string, portrait = 'portrait_capcom', ms = 4200): Phaser.GameObjects.Container {
-  // never taller than about a third of the screen: long messages become a short chain of pages
-  const probe = txt(scene, 0, -999, '', { maxWidth: 214, size: 15 });
-  const pages: string[] = [];
-  let cur = '';
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    const next = cur ? `${cur} ${word}` : word;
-    probe.setText(next);
-    if (probe.height > 3 * 16 + 2 && cur) { pages.push(cur); cur = word; } else cur = next;
-  }
-  if (cur) pages.push(cur);
-  probe.destroy();
-  const show = (i: number): Phaser.GameObjects.Container => {
-    const c = scene.add.container(W - 256, 21).setDepth(800); // below the SKIP / fullscreen / gear buttons
-    const t = txt(scene, 34, 15, pages[i] ?? '', { maxWidth: 214, color: C.white, size: 15 });
-    const h = Math.max(36, t.height + 21);
-    c.add(panel(scene, 0, 0, 252, h, 'dialog'));
-    const pi = scene.add.image(4, 4, portrait).setOrigin(0, 0).setScale(0.5);
-    c.add([pi, txt(scene, 34, 4, `${who.toUpperCase()}${pages.length > 1 ? `  ${i + 1}/${pages.length}` : ''}`, { color: C.gold2 }), t]);
-    pinToScreen(c);
-    c.setAlpha(0);
-    scene.tweens.add({ targets: c, alpha: 1, duration: 200 });
-    const per = pages.length > 1 ? Math.max(2600, ms * 0.8) : ms;
-    scene.time.delayedCall(per, () => scene.tweens.add({ targets: c, alpha: 0, duration: 250, onComplete: () => { c.destroy(); if (i + 1 < pages.length && scene.sys.isActive()) show(i + 1); } }));
-    return c;
+/** One toast on screen at a time: later ones wait their turn (never drawn over an older box). */
+const toastQueues = new WeakMap<Phaser.Scene, { busy: boolean; queue: (() => void)[]; current: Phaser.GameObjects.Container | null }>();
+function toastQueue(scene: Phaser.Scene) {
+  let q = toastQueues.get(scene);
+  if (!q) { q = { busy: false, queue: [], current: null }; toastQueues.set(scene, q); scene.events.once('shutdown', () => toastQueues.delete(scene)); }
+  return q;
+}
+/**
+ * Mission Control / CAPCOM message: at most two lines (about a fifth of the screen), top right, clear of
+ * the resource meters and time buttons. Long messages page; messages queue so only one box shows.
+ */
+export function toast(scene: Phaser.Scene, who: string, text: string, portrait = 'portrait_capcom', ms = 4200): void {
+  const q = toastQueue(scene);
+  const run = () => {
+    q.busy = true;
+    const probe = txt(scene, 0, -999, '', { maxWidth: 214, size: 15 });
+    const pages: string[] = [];
+    let cur = '';
+    for (const word of text.split(/\s+/).filter(Boolean)) {
+      const next = cur ? `${cur} ${word}` : word;
+      probe.setText(next);
+      if (probe.height > 2 * 16 + 2 && cur) { pages.push(cur); cur = word; } else cur = next;
+    }
+    if (cur) pages.push(cur);
+    probe.destroy();
+    const done = () => { q.busy = false; const nxt = q.queue.shift(); if (nxt && scene.sys.isActive()) nxt(); };
+    const show = (i: number) => {
+      const c = scene.add.container(W - 256, 21).setDepth(800); // below the SKIP / fullscreen / gear buttons
+      q.current = c;
+      const t = txt(scene, 34, 15, pages[i] ?? '', { maxWidth: 214, color: C.white, size: 15 });
+      const h = Math.max(36, t.height + 21);
+      c.add(panel(scene, 0, 0, 252, h, 'dialog'));
+      const pi = scene.add.image(4, 4, portrait).setOrigin(0, 0).setScale(0.5);
+      c.add([pi, txt(scene, 34, 4, `${who.toUpperCase()}${pages.length > 1 ? `  ${i + 1}/${pages.length}` : ''}`, { color: C.gold2 }), t]);
+      pinToScreen(c);
+      c.setAlpha(0);
+      scene.tweens.add({ targets: c, alpha: 1, duration: 200 });
+      const per = pages.length > 1 ? Math.max(2600, ms * 0.8) : ms;
+      scene.time.delayedCall(per, () => { if (!c.active) return; scene.tweens.add({ targets: c, alpha: 0, duration: 250, onComplete: () => { c.destroy(); if (q.current === c) q.current = null; if (i + 1 < pages.length && scene.sys.isActive()) show(i + 1); else done(); } }); });
+    };
+    audio.sfx('beep');
+    show(0);
   };
+  if (q.busy) q.queue.push(run); else run();
+}
+
+/**
+ * Small one-line notice (e.g. "Stage 1 now burns methane + LOX"): at most about 15% of the screen,
+ * placed where the caller says (over the art, never over the panel being edited), gone after 3 s or
+ * on any click or key. A new notice replaces the old one.
+ */
+const notices = new WeakMap<Phaser.Scene, Phaser.GameObjects.Container>();
+export function notice(scene: Phaser.Scene, text: string, at: { x: number; y: number; w?: number } = { x: W / 2, y: 30 }) {
+  notices.get(scene)?.destroy();
+  const w = at.w ?? 200;
+  const t = txt(scene, w / 2, 5, text, { align: 'center', color: C.white, maxWidth: w - 12 });
+  const h = Math.min(Math.round(H * 0.15), t.height + 10);
+  const c = scene.add.container(Math.round(at.x - w / 2), at.y).setDepth(820);
+  c.add([panel(scene, 0, 0, w, h, 'dialog'), t]);
+  pinToScreen(c);
+  notices.set(scene, c);
+  const hide = () => { if (c.active) c.destroy(); if (notices.get(scene) === c) notices.delete(scene); scene.input.keyboard?.off('keydown', hide); scene.input.off('pointerdown', hide); };
+  scene.time.delayedCall(3000, hide);
+  scene.time.delayedCall(50, () => { scene.input.keyboard?.once('keydown', hide); scene.input.once('pointerdown', hide); });
   audio.sfx('beep');
-  return show(0);
 }
 
 // ----------------------------------------------------------------- transitions & chrome
