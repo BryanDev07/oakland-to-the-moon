@@ -25,18 +25,43 @@ src/
     audio/audio.ts        Web Audio synth: SFX, engine loops, step-sequenced chiptune music
     ui/ui.ts              BitmapText, NineSlice panels, Button, Meter, Tooltip, Dialogue, modal, toast, transitions
     components/SpacecraftView.ts  modular spacecraft renderer (stack / flight modes, attachment coordinates)
-    scenes/               Boot, Title, Intro, Briefing, Hangar, Review, Launch, Ops, Landing, Surface, Return, Report, Overlay
+    scenes/               Boot, Title, Intro, Briefing, RoleSelect, MissionSelect, Hangar (+ hangarRocket.ts), Desk,
+                          Review, Launch, Ops, Docking, Spacewalk, Landing, Surface, Return, Report, Overlay (18 scenes)
 scripts/
   generate-assets/        procedural pixel-art pipeline (Node + pngjs) → public/assets/**
   validation/screens.mjs  screenshot capture for visual QA
 tests/
-  unit/                   Vitest: rocket, design, mission, landing, scoring (51 tests)
-  e2e/                    Playwright: boot/perf, full mission through the UI, scene robustness
+  unit/                   Vitest: 195 tests (simulation, spec model, desk, deck, roles, ISS, scoring, Isp consistency)
+  e2e/                    Playwright: 7 tests (boot/fit, full Moon mission, full ISS mission, quick start,
+                          save/continue, scene robustness, text fit); screenshots go to test-results/
 ```
+
+## The spec model (what the game runs today)
+
+`SPEC_MODEL = true` in `constants.ts` switches the simulation to the model from `docs/JOSEPH_SPEC.md`.
+It refines the original analysis instead of replacing it:
+
+```
+src/data/specParts.ts        every part and number with an R (real) / G (game) tag, in lb as in the spec
+src/data/missionConfig.ts    Moon Landing vs ISS Rescue: Δv target, re-entry speed, budgets
+src/data/roles.ts            the four roles and their price / budget / science multipliers
+src/simulation/formulas.ts   the 15 Calculation Desk formulas as pure functions
+src/simulation/stack.ts      staged rocket: liftoff weight, TWR, three-piece rocket equation, risks
+src/simulation/specModel.ts  analyzeSpec(): capsule, orbit, architecture, lander, power, data, cost
+src/simulation/specReview.ts GO / NO-GO checks for the spec model
+src/simulation/deskFive.ts   the five Desk sheets (built on calcDesk.ts)
+src/simulation/deck.ts       the 16-card A/B/C emergency deck (issDeck.ts for the ISS mission)
+src/simulation/units.ts      the single lb -> kg conversion boundary
+```
+
+The original component slots for engine, tank and heat shield are hidden (the capsule supplies them),
+and reliability rolls are off (`RELIABILITY_ROLLS = false`); both stay in the code behind flags.
+Flight burns use `stats.propulsion.ispS`, the same Isp the design review used.
 
 ## Data flow
 
 1. **Hangar** edits `store.design` (a `Design`) and calls `reviewDesign()` on every change.
+   **Desk** shows the same numbers as five worked sheets.
 2. **Review** gates launch on zero blocking checks; launching calls `createMission(design, seed)`.
 3. **Ops** advances `step()` at a fixed 300 s timestep (1×/4×/16× = 12/48/192 steps per second),
    pauses for `pending` events, and invokes discrete actions (`executeLOI`, `beginDescent`, `executeTEI`, ...).
