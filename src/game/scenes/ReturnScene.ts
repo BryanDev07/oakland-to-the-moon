@@ -48,7 +48,7 @@ export class ReturnScene extends Phaser.Scene {
       this.hud.setText(`VEL  ${vel.toFixed(2)} km/s\nG    ${g.toFixed(1)} g\nSHIELD ${Math.round(temp)} °C\n${blackout ? 'COMM BLACKOUT' : 'COMM LINK OK'}`).setTint(blackout ? C.orange : C.green);
       this.capsule.x = 240 + Math.sin(t * 30) * (store.settings.screenShake ? 1 : 0);
       this.plasma.setAlpha(Math.max(0, Math.sin(Math.min(1, f * 1.15) * Math.PI)));
-      if (!this.ok && t > 5) { this.stage = 2; audio.loop('wind', 0); audio.sfx('fail'); this.cameras.main.flash(500, 255, 120, 60); this.time.delayedCall(1200, () => fadeTo(this, 'Report')); return; }
+      if (!this.ok && t > 5) { this.stage = 2; audio.loop('wind', 0); audio.sfx('fail'); if (!store.settings.reduceMotion) this.cameras.main.flash(500, 255, 120, 60); this.time.delayedCall(1200, () => fadeTo(this, 'Report')); return; }
       if (t > 9) { this.stage = 1; audio.loop('wind', 0.2); this.chutes(); }
     }
   }

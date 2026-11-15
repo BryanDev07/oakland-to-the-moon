@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { GLOSSARY_TERMS } from '../../data/glossary';
+import { EXPLAIN_LABEL, explainLevel } from '../ui/explain';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, H, onceKey, panel, txt, W } from '../ui/ui';
@@ -65,18 +67,25 @@ export class OverlayScene extends Phaser.Scene {
       p.add(new Button(this, 220, y, '+', () => { onPlus(); this.settings(); }, { w: 18 }));
     };
     const step = (k: 'musicVolume' | 'sfxVolume', d: number) => { s[k] = Math.round(Math.max(0, Math.min(1, s[k] + d)) * 10) / 10; store.saveSettings(); audio.applyVolumes(); audio.sfx('beep'); };
+    // 17 px rows so the D2 accessibility settings fit on the page
     row(0, 'Music volume', `${Math.round(s.musicVolume * 100)}%`, () => step('musicVolume', -0.1), () => step('musicVolume', 0.1));
-    row(22, 'Sound effects', `${Math.round(s.sfxVolume * 100)}%`, () => step('sfxVolume', -0.1), () => step('sfxVolume', 0.1));
+    row(17, 'Sound effects', `${Math.round(s.sfxVolume * 100)}%`, () => step('sfxVolume', -0.1), () => step('sfxVolume', 0.1));
     const speeds: typeof s.textSpeed[] = ['slow', 'normal', 'fast', 'instant'];
-    row(44, 'Text speed', s.textSpeed.toUpperCase(), () => { s.textSpeed = speeds[Math.max(0, speeds.indexOf(s.textSpeed) - 1)]; store.saveSettings(); }, () => { s.textSpeed = speeds[Math.min(3, speeds.indexOf(s.textSpeed) + 1)]; store.saveSettings(); });
-    const toggle = (y: number, label: string, key: 'muted' | 'screenShake' | 'scanlines') => {
+    row(34, 'Text speed', s.textSpeed.toUpperCase(), () => { s.textSpeed = speeds[Math.max(0, speeds.indexOf(s.textSpeed) - 1)]; store.saveSettings(); }, () => { s.textSpeed = speeds[Math.min(3, speeds.indexOf(s.textSpeed) + 1)]; store.saveSettings(); });
+    const levels: typeof s.explain[] = ['auto', 'beginner', 'curious', 'engineer'];
+    p.add(txt(this, 0, 55, `Explain (now ${EXPLAIN_LABEL[explainLevel()].toLowerCase()})`, { color: C.dim }));
+    p.add(new Button(this, 160, 51, s.explain.toUpperCase(), () => { s.explain = levels[(levels.indexOf(s.explain) + 1) % 4]; store.saveSettings(); this.settings(); }, { w: 78 }));
+    const toggle = (y: number, label: string, key: 'muted' | 'screenShake' | 'scanlines' | 'reduceMotion' | 'statusIcons', after?: () => void) => {
       p.add(txt(this, 0, y + 4, label, { color: C.dim }));
-      p.add(new Button(this, 160, y, s[key] ? 'ON' : 'OFF', () => { s[key] = !s[key]; store.saveSettings(); audio.applyVolumes(); this.settings(); }, { w: 78 }).setSelected(s[key]));
+      p.add(new Button(this, 160, y, s[key] ? 'ON' : 'OFF', () => { s[key] = !s[key]; after?.(); store.saveSettings(); audio.applyVolumes(); this.settings(); }, { w: 78 }).setSelected(s[key]));
     };
-    toggle(66, 'Mute all audio', 'muted');
-    toggle(88, 'Screen shake', 'screenShake');
-    toggle(110, 'CRT scanlines', 'scanlines');
-    p.add(txt(this, 0, 140, 'Settings are saved on this device. Audio starts after your first click (browser rule).', { color: C.dim, maxWidth: 290 }));
+    p.add(txt(this, 0, 72, 'Text size', { color: C.dim }));
+    p.add(new Button(this, 160, 68, s.textSize === 'large' ? 'LARGE' : 'NORMAL', () => { s.textSize = s.textSize === 'large' ? 'normal' : 'large'; store.saveSettings(); this.settings(); }, { w: 78 }).setSelected(s.textSize === 'large'));
+    toggle(85, 'Reduce motion', 'reduceMotion', () => { if (s.reduceMotion) s.screenShake = false; });
+    toggle(102, 'Pass/fail icons', 'statusIcons');
+    toggle(119, 'Mute all audio', 'muted');
+    toggle(136, 'Screen shake', 'screenShake', () => { if (s.screenShake) s.reduceMotion = false; });
+    toggle(153, 'CRT scanlines', 'scanlines');
   }
   help() {
     const p = this.clear();
@@ -110,6 +119,15 @@ export class OverlayScene extends Phaser.Scene {
   }
   private libraryPages(): ((p: Phaser.GameObjects.Container) => void)[] {
     const out: ((p: Phaser.GameObjects.Container) => void)[] = [];
+    // D2: glossary pages first (key terms, one sentence each)
+    for (let i = 0; i < GLOSSARY_TERMS.length; i += 5) {
+      const terms = GLOSSARY_TERMS.slice(i, i + 5);
+      out.push((p) => {
+        p.add(txt(this, 0, 0, 'GLOSSARY', { color: C.gold2 }));
+        let y = 14;
+        for (const t of terms) { p.add(txt(this, 0, y, t.term, { color: C.gold })); const d = txt(this, 6, y + 11, t.def, { color: C.white, maxWidth: 290 }); p.add(d); y += 14 + d.height; }
+      });
+    }
     // formulas: one per page at 15 px (never shrink to fit)
     const fpages: typeof FORMULAS[] = [];
     for (const f of FORMULAS) fpages.push([f]);

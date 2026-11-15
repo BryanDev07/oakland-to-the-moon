@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { byLevel, bodySize, explainLevel, underlineTerms } from '../ui/explain';
 import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
@@ -16,7 +17,8 @@ const COL = { body: 0x222222, title: 0x222222, build: 0x1f3a93, add: 0x0f6b6b, p
 const SCOL = { body: 0xfff4d6, title: 0xffd27a, build: 0xffe14a, add: 0x6ff0ff, pass: 0x7cf07c, fail: 0xff6a5a, explain: 0xb8e6ff };
 const BODY = 15, BIG = 20; // side panel sizes (1.5x and 2x of the pixel font)
 /** Paper sizes (B2): body at the crisp 1x size (1.5x doubles some strokes and reads as bold), heading 2x, verdict 1.5x. */
-const PBODY = 10, PHEAD = 20, PVERDICT = 15;
+const PHEAD = 20, PVERDICT = 15;
+let PBODY = 10; // set from the text-size setting in create() (Large = 12)
 const RULE = 16; // ruled-line spacing; body text snaps to it
 const PX = 28, PW = 292, PTOP = 12, PBOTTOM = 258; // paper text column (right of the red margin, left of the pencil)
 const SX = 352, SW = 122; // the narrower dark side panel
@@ -43,6 +45,7 @@ export class DeskScene extends Phaser.Scene {
   feedbackColor = SCOL.body;
   pencil!: Phaser.GameObjects.Image;
   pencilY = -1;
+  showMath = false; // D2 Beginner: formulas behind "see the math"
   constructor() { super('Desk'); }
 
   create() {
@@ -50,6 +53,8 @@ export class DeskScene extends Phaser.Scene {
     audio.music('build');
     this.stats = analyzeDesign(store.design);
     this.easy = specOf(store.design).difficulty !== 'hard';
+    PBODY = bodySize(10); // D2: Large text
+    this.showMath = false;
     this.sheets = this.stats.spec ? buildFiveSheets(store.design, this.stats) : []; // B1: five sheets
     this.idx = 0; this.calc = ''; this.feedback = ''; this.boardPage = 0;
     // pixel-art desk with a dark chalkboard sheet (high contrast for every colour role)
@@ -80,6 +85,7 @@ export class DeskScene extends Phaser.Scene {
       else if (e.key === 'ArrowLeft') this.prevSheet();
       else if (e.key === 's' || e.key === 'S') this.skipSheet();
       else if (e.key === 'e' || e.key === 'E') this.example();
+      else if ((e.key === 'm' || e.key === 'M') && explainLevel() === 'beginner') { this.showMath = !this.showMath; this.render(); }
     }));
     gearButton(this);
     crt(this).v.setVisible(false); // the vignette's dither shows as hatching on cream paper
@@ -243,8 +249,12 @@ export class DeskScene extends Phaser.Scene {
     type Line = { s: string; color: number; dx?: number; size?: number };
     const header: Line[] = [
       { s: `${sh.n}. ${sh.title}`, color: COL.title, size: PHEAD },
-      { s: sh.formula, color: COL.body },
-      ...(this.shown <= 1 ? [{ s: sh.think, color: COL.explain }] : []),
+      // D2: Beginner sees the everyday comparison (maths on request); Curious words + numbers; Engineer the formula
+      ...byLevel<Line[]>(
+        [{ s: sh.think, color: COL.explain }, ...(this.showMath ? [{ s: sh.formula, color: COL.body }] : [])],
+        [{ s: sh.formula, color: COL.body }, ...(this.shown <= 1 ? [{ s: sh.think, color: COL.explain }] : [])],
+        [{ s: sh.formulaEngineer ?? sh.formula, color: COL.body }],
+      ),
       // while an addition waits, its cyan lines carry the numbers: the build lines step aside
       // your numbers open the sheet; once the steps start, each step line carries its own numbers
       ...(this.pendingAdd() || this.shown > 1 ? [] : sh.given.map((x) => ({ s: x, color: COL.build }))),
@@ -261,7 +271,7 @@ export class DeskScene extends Phaser.Scene {
         blocks.push(b);
       } else {
         const b: Line[] = [{ s: `${st.label} = ${this.fmtVal(st, st.expect)}`, color: COL.body }];
-        if (cur) b.push({ s: st.explain ?? '', color: COL.explain, dx: 8 });
+        if (cur && explainLevel() !== 'engineer') b.push({ s: st.explain ?? '', color: COL.explain, dx: 8 });
         blocks.push(b);
       }
     });
@@ -277,12 +287,17 @@ export class DeskScene extends Phaser.Scene {
     if (blocks.slice(first).reduce((a, bl) => a + hOf(bl), 0) > room()) hdr = header.filter((l) => l.color !== COL.explain);
     let y = PTOP;
     let lastY = PTOP;
-    const put = (l: Line) => { if (!l.s || y > PBOTTOM - 14) return; if (!l.size) y = Math.ceil(y / RULE) * RULE; if (y + (l.size ? this.heightOf(l.s, PW - (l.dx ?? 0), l.size) : 11) > PBOTTOM) return; const o = this.t(PX + (l.dx ?? 0), y, l.s, l.color, l.size ?? PBODY, PW - (l.dx ?? 0)); this.paper.add(o); lastY = y; y += l.size ? o.height + 4 : Math.ceil((o.height + 2) / RULE) * RULE; };
+    const put = (l: Line) => { if (!l.s || y > PBOTTOM - 14) return; if (!l.size) y = Math.ceil(y / RULE) * RULE; if (y + (l.size ? this.heightOf(l.s, PW - (l.dx ?? 0), l.size) : 11) > PBOTTOM) return; const o = this.t(PX + (l.dx ?? 0), y, l.s, l.color, l.size ?? PBODY, PW - (l.dx ?? 0)); this.paper.add(o); underlineTerms(this, o, this.paper, COL.build); lastY = y; y += l.size ? o.height + 4 : Math.ceil((o.height + 2) / RULE) * RULE; };
     hdr.forEach(put);
     y += 4;
     if (first > 0) put({ s: `(${first} earlier step${first > 1 ? 's' : ''} above)`, color: COL.explain });
     blocks.slice(first).forEach((bl) => bl.forEach(put));
     this.movePencil(lastY);
+    if (explainLevel() === 'beginner') {
+      const m = this.t(PX + PW, PTOP + 22, this.showMath ? 'hide the math (M)' : 'see the math (M)', COL.add, 10, 120, 'right'); // just under the heading
+      m.setInteractive({ useHandCursor: true }).on('pointerup', () => { this.showMath = !this.showMath; this.render(); });
+      this.paper.add(m);
+    }
 
     // ---- side panel
     const S = this.side;
@@ -302,7 +317,7 @@ export class DeskScene extends Phaser.Scene {
       // big key numbers: the target, then PASS / FAIL once worked
       S.add(this.t(SX + 2, 58, 'TARGET', SCOL.body, BODY, SW - 4));
       S.add(this.t(SX + 2, 74, sh.target, SCOL.build, BODY, SW - 4));
-      if (vd) S.add(this.t(SX + 2, 128, vd.pass ? 'PASS' : 'FAIL', vd.pass ? SCOL.pass : SCOL.fail, BIG, SW - 4));
+      if (vd) S.add(this.t(SX + 2, 128, `${store.settings.statusIcons ? (vd.pass ? '✓ ' : '× ') : ''}${vd.pass ? 'PASS' : 'FAIL'}`, vd.pass ? SCOL.pass : SCOL.fail, BIG, SW - 4));
       else if (this.feedback) S.add(this.t(SX + 2, 150, this.feedback, this.feedbackColor, BODY, SW - 4));
       const acts = done ? sh.actions ?? [] : [];
       acts.forEach((a, k) => { const b = new Button(this, SX, 156 + k * 21, a.label.replace('USE THIS: ', 'USE ').replace(' LB', ' lb'), () => this.act(a), { w: SW, h: 19, style: 'go' }); S.add(b); }); // 10 px labels fit the narrow panel

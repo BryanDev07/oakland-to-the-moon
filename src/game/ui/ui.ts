@@ -14,6 +14,9 @@ export const ICON_NAMES = ['fuel', 'battery', 'power', 'sun', 'o2', 'water', 'co
 export const iconFrame = (n: string) => Math.max(0, ICON_NAMES.indexOf(n));
 
 export interface TxtOpts { color?: number; scale?: 1 | 2 | 3; size?: number; align?: 'left' | 'center' | 'right'; maxWidth?: number; shadow?: boolean; origin?: [number, number]; depth?: number }
+/** D2: Large text setting (body text that wraps or pages grows; fixed rows keep their size). */
+export const largeText = () => store.settings.textSize === 'large';
+
 export function txt(scene: Phaser.Scene, x: number, y: number, s: string, o: TxtOpts = {}): Phaser.GameObjects.BitmapText {
   const t = scene.add.bitmapText(Math.round(x), Math.round(y), 'px', s, o.size ?? 10 * (o.scale ?? 1));
   if (o.maxWidth) t.setMaxWidth(o.maxWidth);
@@ -182,7 +185,7 @@ export const Tooltip = {
   },
   draw(scene: Phaser.Scene, text: string, anchor: Anchor) {
     let maxW = 280;
-    const t = txt(scene, 6, 5, text, { maxWidth: maxW - 12, color: C.white, size: 15 });
+    const t = txt(scene, 6, 5, text, { maxWidth: maxW - 12, color: C.white, size: largeText() ? 20 : 15 });
     if (t.height + 11 > H - 4) { maxW = W - 8; t.setMaxWidth(maxW - 12); }
     if (t.height + 11 > H - 4) t.setFontSize(10).setMaxWidth(maxW - 12);
     const h = Math.max(18, t.height + 11);
@@ -243,7 +246,7 @@ export class Dialogue extends Phaser.GameObjects.Container {
     this.frame = panel(scene, 0, 0, w, h, 'dialog');
     this.portrait = scene.add.image(6, 6, 'portrait_kai').setOrigin(0, 0).setScale(0.75); // smaller portrait
     this.nameText = txt(scene, 50, 5, '', { color: C.gold2 });
-    this.bodyText = txt(scene, 50, 17, '', { maxWidth: w - 64, color: C.white, size: 15 });
+    this.bodyText = txt(scene, 50, 17, '', { maxWidth: w - 64, color: C.white, size: largeText() ? 20 : 15 });
     this.arrow = scene.add.sprite(w - 14, h - 12, 'arrow', 0).setOrigin(0, 0);
     this.arrow.play('arrow-blink');
     this.hint = txt(scene, w - 18, h - 12, '', { align: 'right', color: 0x9fe0ff });
@@ -262,8 +265,9 @@ export class Dialogue extends Phaser.GameObjects.Container {
   /** Split a line into pages of at most LINES wrapped lines at the box's width. */
   paginate(l: Line): Line[] {
     const w = W - 12 - this.bodyX(l) - 14;
-    const probe = txt(this.scene, 0, -999, '', { maxWidth: w, size: 15 });
-    const maxH = Dialogue.LINES * 16 + 2;
+    const big = largeText();
+    const probe = txt(this.scene, 0, -999, '', { maxWidth: w, size: big ? 20 : 15 });
+    const maxH = big ? 2 * 21 + 2 : Dialogue.LINES * 16 + 2;
     const pages: string[] = [];
     let cur = '';
     for (const word of l.text.split(/\s+/).filter(Boolean)) {
@@ -370,7 +374,7 @@ export function modal(scene: Phaser.Scene, opts: { title: string; text: string; 
     return { c, h };
   };
   // Readable first (15 px). Never clip: grow to the screen width, then step the font down.
-  const base = opts.size ?? 15;
+  const base = opts.size ?? (largeText() ? 20 : 15);
   let w = Math.min(Math.max(opts.width ?? 340, base > 10 ? 400 : 0), W - 8);
   let r = build(w, base);
   if (r.h > H - 8 && w < W - 8) { r.c.destroy(); w = W - 8; r = build(w, base); }

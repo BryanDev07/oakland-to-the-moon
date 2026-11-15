@@ -24,6 +24,8 @@ export interface Step {
 }
 export interface Sheet {
   id: string; n: number; title: string; question: string; think: string; formula: string;
+  /** D2 Engineer level: the formula in symbols (Beginner sees `think`, Curious sees `formula`). */
+  formulaEngineer?: string;
   given: string[]; steps: Step[]; target: string; example?: string;
   /** After all steps: is the answer good for the mission, and (Easy) which part to change. */
   verdict: () => { pass: boolean; text: string; pointer?: string };

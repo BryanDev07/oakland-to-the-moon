@@ -38,6 +38,7 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
     id: 'liftoff', n: 1, title: 'CAN IT LIFT OFF?', question: 'Do the engines push harder than gravity pulls, at liftoff and up high?',
     think: 'Like lifting a box: push less than it weighs and it does not move.',
     formula: 'thrust-to-weight = total push / weight; at least 1.2 at liftoff and 0.3 for stage 2',
+    formulaEngineer: 'TWR = F / (m x 4.448 N/lb) >= 1.2; F2 / W2 >= 0.3',
     given: [...liftoff.given, ...twr.given.slice(0, -1)],
     steps: [
       ...liftoff.steps, // the player adds the 4 weights
@@ -64,6 +65,7 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
     id: 'moon', n: 2, title: 'CAN IT REACH THE MOON?', question: 'Do the pieces add up to the speed the Moon needs?',
     think: 'Throwing balls off a skateboard: more balls and faster throws mean more speed.',
     formula: `speed gained (Δv) = exhaust speed x ln(full weight / empty weight); total must reach ${fmt(MISSION_DV.toMoon)} m/s`,
+    formulaEngineer: `Δv = ve x ln(m0 / mf); ve = Isp x 9.81; sum of Δv >= ${fmt(MISSION_DV.toMoon)} m/s`,
     given: [...ve.given, ...eq.given],
     steps: [
       ...ve.steps,
@@ -91,6 +93,7 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
     id: 'thereback', n: 3, title: 'CAN IT GET THERE AND BACK?', question: 'Enough fuel to get into lunar orbit, land, lift off, come home, and survive re-entry?',
     think: 'A road trip where the only gas station is at home.',
     formula: 'fuel used = weight x (1 - e^(-speed / exhaust speed)); shield health = rating / 24,400 mph',
+    formulaEngineer: 'mp = m0 x (1 - e^(-Δv / ve)); TWR(Moon) = F / (W x 0.165); health = rating / 24,400',
     given: parts3.flatMap((x) => x.given),
     steps: parts3.flatMap((x) => x.steps).map(toGame),
     extra: parts3.flatMap((x) => x.extra ?? []),
@@ -104,6 +107,7 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
     id: 'crew', n: 4, title: 'CAN THE CREW SURVIVE?', question: 'Enough oxygen, water, food and power for every day?',
     think: 'About 15 lb of supplies per astronaut per day, and a battery for the dark.',
     formula: 'supplies = crew x days x pounds per day; battery = watts x dark hours x 1.2',
+    formulaEngineer: 'lb = n x d x (2.0 + 5.5 + 2.2 + 5.27); Wh = P x t(dark) x 1.2; P(made) = P(panel) x f(sun)',
     given: [...supplies.given, ...power.given],
     steps: [...supplies.steps, ...power.steps], // the player adds the 4 supply lines
     target: `${supplies.target} Power made >= power used.`,
@@ -116,6 +120,7 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
     id: 'talk', n: 5, title: 'CAN WE TALK AND AFFORD IT?', question: 'Does the data get home, how late are the messages, and is there money left?',
     think: 'Radio travels at the speed of light; every part drops the budget meter.',
     formula: 'MB per day = kbps x 86,400 x contact / 8,000; seconds = miles / 186,282; money left = budget - spent',
+    formulaEngineer: 'MB/d = kbps x 86,400 x f(contact) / 8,000; t = d / c; left = budget - sum(spent)',
     given: [...data.given, signal.given[0], ...money.given],
     steps: [...data.steps, ...signal.steps, ...money.steps], // the player adds the receipt
     target: `${data.target} Money left above $0.`,

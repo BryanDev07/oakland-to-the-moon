@@ -271,7 +271,7 @@ export class LandingScene extends Phaser.Scene {
     const s = store.mission!;
     audio.sfx('fail');
     if (store.settings.screenShake) this.cameras.main.shake(700, 0.025);
-    this.cameras.main.flash(250, 255, 200, 140);
+    if (!store.settings.reduceMotion) this.cameras.main.flash(250, 255, 200, 140);
     const x = this.lander.x, gy = this.lander.y;
     this.lander.setVisible(false); this.flame.setVisible(false);
     this.msg.setText(''); // no flight warnings over the wreck

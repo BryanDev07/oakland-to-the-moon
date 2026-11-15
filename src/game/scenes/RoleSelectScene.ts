@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { EXPLAIN_LABEL, EXPLAIN_WHAT, ExplainLevel } from '../ui/explain';
 import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
@@ -27,7 +28,7 @@ export class RoleSelectScene extends Phaser.Scene {
     const sp = specOf(store.design);
     this.role = sp.role ?? 'commander';
     this.difficulty = sp.difficulty;
-    this.cards = []; this.diffBtns = [];
+    this.cards = []; this.diffBtns = []; this.explainBtns = [];
     this.add.image(0, 0, 'mission_control').setOrigin(0, 0).setTint(0x606080);
     txt(this, W / 2, 6, 'CHOOSE YOUR SPECIALTY', { align: 'center', color: C.gold });
     txt(this, W / 2, 17, 'Single player: your specialty changes your discounts, perks and tips.', { align: 'center', color: C.dim });
@@ -53,6 +54,11 @@ export class RoleSelectScene extends Phaser.Scene {
       const b = new Button(this, 70 + i * 64, 217, d === 'easy' ? 'EASY (E)' : 'HARD (H)', () => this.setDiff(d), { w: 60, h: 16 });
       this.diffBtns.push({ id: d, b });
     });
+    // D2: explain level (Auto follows difficulty: Easy = Beginner, Hard = Engineer); X cycles it
+    (['beginner', 'curious', 'engineer'] as ExplainLevel[]).forEach((lv, i) => {
+      const b = new Button(this, 206 + i * 57, 217, EXPLAIN_LABEL[lv], () => this.setExplain(lv), { w: 55, h: 16 });
+      this.explainBtns.push({ id: lv, b });
+    });
     this.diffText = txt(this, 8, 238, '', { color: C.text, maxWidth: 360 });
     new Button(this, W - 100, 240, 'CONFIRM ▶', () => this.go(), { w: 92, h: 22, style: 'go', tooltip: 'Head to the hangar (Enter)' });
 
@@ -65,6 +71,7 @@ export class RoleSelectScene extends Phaser.Scene {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') this.pick(ROLES[(idx + ROLES.length - 1) % ROLES.length].id);
       if (e.key === 'e' || e.key === 'E') this.setDiff('easy');
       if (e.key === 'h' || e.key === 'H') this.setDiff('hard');
+      if (e.key === 'x' || e.key === 'X') { const order: ExplainLevel[] = ['beginner', 'curious', 'engineer']; this.setExplain(order[(order.indexOf(this.explainNow()) + 1) % 3]); }
       if (e.key === 'Enter') this.go();
     }));
     gearButton(this);
@@ -76,14 +83,20 @@ export class RoleSelectScene extends Phaser.Scene {
 
   pick(id: RoleId) { if (this.role !== id) audio.sfx('select'); this.role = id; this.refresh(); }
   setDiff(d: Difficulty) { if (this.difficulty !== d) audio.sfx('select'); this.difficulty = d; this.refresh(); }
+  explainBtns: { id: ExplainLevel; b: Button }[] = [];
+  /** The level shown here: the saved choice, or the difficulty's default while it is Auto. */
+  explainNow(): ExplainLevel { const e = store.settings.explain; return e && e !== 'auto' ? e : this.difficulty === 'hard' ? 'engineer' : 'beginner'; }
+  setExplain(lv: ExplainLevel) { audio.sfx('select'); store.settings.explain = lv; store.saveSettings(); this.refresh(); }
 
   refresh() {
     for (const c of this.cards) c.card.setTexture(c.id === this.role ? 'card_sel' : 'card');
     for (const d of this.diffBtns) d.b.setSelected(d.id === this.difficulty);
+    for (const e of this.explainBtns) e.b.setSelected(e.id === this.explainNow());
     const budget = BUDGETS_USD[this.difficulty].v * (this.role === 'commander' ? 1.05 : 1);
     this.diffText.setText(this.difficulty === 'easy'
       ? `EASY (sandbox): budget ${fmtUsd(budget)}. Formulas, worked examples and hints. 3 softer emergencies.`
       : `HARD (realistic): budget ${fmtUsd(budget)}. Formulas and targets only. 5 full-strength emergencies.`);
+    this.diffText.setText(`${this.diffText.text} ${EXPLAIN_WHAT[this.explainNow()]}`);
   }
 
   go() {

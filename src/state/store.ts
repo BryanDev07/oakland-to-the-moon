@@ -14,11 +14,16 @@ export interface Settings {
   screenShake: boolean;
   scanlines: boolean;
   skipSeenCinematics: boolean;
+  /** D2 accessibility (new fields; older saved settings get the defaults). */
+  explain: 'auto' | 'beginner' | 'curious' | 'engineer';
+  textSize: 'normal' | 'large';
+  reduceMotion: boolean;
+  statusIcons: boolean;
 }
 export interface HistoryEntry { date: string; outcome: string; score: number; grade: string; science: number; costM: number; site: string; lv: string; seed: number }
 
 const KEY = { design: 'ottm.design.v1', mission: 'ottm.mission.v1', history: 'ottm.history.v1', settings: 'ottm.settings.v1', seen: 'ottm.seen.v1' };
-const DEFAULT_SETTINGS: Settings = { musicVolume: 0.5, sfxVolume: 0.7, muted: false, textSpeed: 'normal', screenShake: true, scanlines: true, skipSeenCinematics: false };
+const DEFAULT_SETTINGS: Settings = { musicVolume: 0.5, sfxVolume: 0.7, muted: false, textSpeed: 'normal', screenShake: true, scanlines: true, skipSeenCinematics: false, explain: 'auto', textSize: 'normal', reduceMotion: false, statusIcons: true };
 
 function read<T>(key: string, fallback: T): T {
   try {

@@ -4,6 +4,7 @@
  * "start from" buttons, and a live readout that turns green or red. Pure helpers: rocketEditor.ts.
  */
 import Phaser from 'phaser';
+import { store } from '../../state/store';
 import { audio } from '../audio/audio';
 import { Button, C, pagedText, toast, Tooltip, txt } from '../ui/ui';
 import type { Design } from '../../data/mission';
@@ -27,6 +28,8 @@ export interface RocketHost extends Phaser.Scene {
 
 const X0 = 326, W0 = 148;
 const ok = (b: boolean) => (b ? C.green : C.red);
+/** D2: pass/fail with an icon as well as colour (colour-blind players). */
+const mark = (b: boolean) => (store.settings.statusIcons ? (b ? '✓ ' : '× ') : '');
 
 export function renderRocketTab(h: RocketHost) {
   const R = h.right;
@@ -71,8 +74,8 @@ export function renderRocketTab(h: RocketHost) {
       h.detail.add(txt(h, X0 + 2, y, a, { color: ca }));
       h.detail.add(txt(h, X0 + W0 - 2, y, bText, { color: cb, align: 'right' }));
     };
-    line(190, `${fmt(r.liftoffLb)} lb`, C.text, `TWR ${r.twr.toFixed(2)}`, ok(r.twrOk));
-    line(201, `S2 push ${r.upper.toFixed(2)}`, ok(r.upperOk), `${fmt(r.dv)} m/s`, ok(r.dvOk));
+    line(190, `${fmt(r.liftoffLb)} lb`, C.text, `${mark(r.twrOk)}TWR ${r.twr.toFixed(2)}`, ok(r.twrOk));
+    line(201, `${mark(r.upperOk)}S2 ${r.upper.toFixed(2)}`, ok(r.upperOk), `${mark(r.dvOk)}${fmt(r.dv)} m/s`, ok(r.dvOk));
   }
 
   R.add(txt(h, 400, 7, 'ROCKET', { align: 'center', color: C.gold }));
