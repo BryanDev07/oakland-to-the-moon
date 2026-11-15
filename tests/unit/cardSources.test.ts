@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { DECK } from '../../src/simulation/deck';
 import { CARD_SOURCES, realEventLine } from '../../src/data/cardSources';
+import { ISS_CARDS } from '../../src/simulation/issDeck';
 
 describe('real-event lines on emergency cards', () => {
   it('each real card has a one-line event with a source name and link; scenario cards have none', () => {
@@ -11,5 +12,13 @@ describe('real-event lines on emergency cards', () => {
       if (real) { expect(realEventLine(c.id)).toMatch(/^Real event: .+ \(.+\)$/); expect(CARD_SOURCES[c.id].url).toMatch(/^https:\/\//); }
     }
     expect(realEventLine('card11')).toBe('Real event: Soyuz MS-09 leak, ISS, 2018 (NBC News)');
+  });
+  it('the ISS real-event cards say "This really happened" with a sourced line; the scenarios do not', () => {
+    for (const c of ISS_CARDS) {
+      expect(!!CARD_SOURCES[c.id]).toBe(!!c.real);
+      expect(!!c.scenario).toBe(!c.real);
+    }
+    expect(realEventLine('issHelmet')).toBe("Real event: Water leaked into Luca Parmitano's helmet on a spacewalk, 2013 (Space.com)");
+    expect(CARD_SOURCES.issArray.source).toBe('ESA');
   });
 });

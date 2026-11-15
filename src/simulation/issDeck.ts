@@ -2,8 +2,8 @@
  * E5: the ISS emergency deck (3 cards on Easy, 5 on Hard; every option has a Good and a Bad line).
  * Shared with the Moon deck: engine out (1), lightning (2), small cabin leak (11). ISS versions of
  * thrusters failing during docking (12) and a sick crew member (15), and four new ISS cards.
- * The three new real-event cards are labelled "Scenario based on a real event" until their source
- * links are confirmed (TODO lines in SOURCES.md; no invented URLs).
+ * The three real-event ISS cards (helmet leak 2013, tool bag 2008, array tear 2007) say "This really
+ * happened" with their source (cardSources.ts, SOURCES.md); debris avoidance is a scenario.
  */
 import type { Card } from './deck';
 import { em, spendDays } from './deck';
@@ -71,7 +71,8 @@ export const ISS_CARDS: Card[] = [
     ],
   },
   {
-    id: 'issHelmet', n: 18, title: 'WATER IN THE SPACEWALKER\'S HELMET', stages: ['spacewalk'], scenario: true,
+    id: 'issHelmet', n: 18, title: 'WATER IN THE SPACEWALKER\'S HELMET', stages: ['spacewalk'],
+    real: 'Water leaked into ESA astronaut Luca Parmitano\'s helmet on a 2013 spacewalk; it was ended early.',
     eligible: () => true, weakSpot: () => 1,
     text: (s) => `Water is collecting in the helmet. Suit oxygen left: ${o2h(s)}.`,
     hint: 'Water in a helmet can be deadly: safety first.',
@@ -83,7 +84,8 @@ export const ISS_CARDS: Card[] = [
     ],
   },
   {
-    id: 'issToolbag', n: 19, title: 'TOOL BAG FLOATS AWAY', stages: ['spacewalk'], scenario: true,
+    id: 'issToolbag', n: 19, title: 'TOOL BAG FLOATS AWAY', stages: ['spacewalk'],
+    real: 'A tool bag floated away on a 2008 spacewalk (STS-126).',
     eligible: () => true, weakSpot: () => 1,
     text: (s) => `A tool bag drifted off its tether. Suit oxygen left: ${o2h(s)}.`,
     hint: 'Chasing things in space is risky.',
@@ -95,7 +97,8 @@ export const ISS_CARDS: Card[] = [
     ],
   },
   {
-    id: 'issArray', n: 20, title: 'SOLAR ARRAY TEARS WHILE UNFOLDING', stages: ['spacewalk'], scenario: true,
+    id: 'issArray', n: 20, title: 'SOLAR ARRAY TEARS WHILE UNFOLDING', stages: ['spacewalk'],
+    real: 'An ISS solar array tore in 2007 and was repaired on a spacewalk (STS-120).',
     eligible: () => true, weakSpot: () => 1,
     text: (s) => `The panel snagged and tore as it unfolded. Suit oxygen left: ${o2h(s)}.`,
     hint: 'A small tear can grow.',
@@ -109,10 +112,7 @@ export const ISS_CARDS: Card[] = [
 ];
 /** Shared Moon cards that also fly on the ISS mission, with their ISS stage. */
 export const ISS_SHARED: Record<string, 'launch' | 'coast'> = { card1: 'launch', card2: 'launch', card11: 'coast' };
-/** "Scenario based on a real event" tags (source links still to confirm). */
+/** Tag line for the debris card (a scenario based on routine ISS practice). */
 export const ISS_TAGS: Record<string, string> = {
   issDebris: 'Scenario based on real events: the ISS regularly fires thrusters to dodge debris',
-  issHelmet: 'Scenario based on a real event (Luca Parmitano, 2013)',
-  issToolbag: 'Scenario based on a real event (lost tool bag, 2008)',
-  issArray: 'Scenario based on a real event (ISS array tear, 2007)',
 };

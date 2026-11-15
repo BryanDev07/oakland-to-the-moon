@@ -5,7 +5,7 @@ choices, documented with their simplifications in `docs/SCIENTIFIC_ASSUMPTIONS.m
 next to each number in `src/data/specParts.ts`, and the in-game **Science library** (pause menu →
 LIBRARY) shows every formula and part value with its tag and a link to its source.
 
-The links were collected in the project spec (`JOSEPH_SPEC.md`, tab 8) and were not re-fetched while
+The links were collected in the project spec (`docs/JOSEPH_SPEC.md`, tab 8) and were not re-fetched while
 the code was written; please report any link that has moved.
 
 ## Challenge
@@ -82,9 +82,9 @@ the code was written; please report any link that has moved.
 |---|---|
 | 11. Small cabin leak (shared) | Soyuz MS-09, 2018 (NBC News), above |
 | 12. Thrusters failing during docking (ISS version) | Starliner, 2024 (Space.com), above |
-| 18. Water in the spacewalker's helmet | TODO (Joseph): add a source link for Luca Parmitano's 2013 helmet leak. Labelled "Scenario based on a real event" in game until then. |
-| 19. Tool bag floats away | TODO (Joseph): add a source link for the tool bag lost on a 2008 spacewalk. Labelled "Scenario based on a real event" in game until then. |
-| 20. Solar array tears while unfolding | TODO (Joseph): add a source link for the 2007 ISS array tear and spacewalk repair. Labelled "Scenario based on a real event" in game until then. |
+| 18. Water in the spacewalker's helmet | Luca Parmitano's helmet water leak, 2013 (Space.com) — https://space.com/21988-spacewalk-dangers-spacesuit-water-leak.html |
+| 19. Tool bag floats away | Lost tool bag, STS-126, 2008 (Space.com) — https://www.space.com/6131-astronaut-laments-lost-spacewalk-tool-bag.html |
+| 20. Solar array tears while unfolding | Torn ISS solar array repaired on a spacewalk, STS-120, 2007 (ESA) — https://www.esa.int/ESA_Multimedia/Images/2007/11/Spacewalk_to_repair_the_Station_s_torn_solar_array |
 | 17. Debris avoidance | Scenario based on real events (the ISS regularly fires thrusters to dodge debris); no single source needed. |
 
 Cards **3, 6, 9, 10, 14 and 15** are made up but realistic: the game labels them
