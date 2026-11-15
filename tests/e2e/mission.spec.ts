@@ -138,6 +138,9 @@ test.describe('Oakland to the Moon', () => {
     // Oakland: pick difficulty and specialty (defaults: Mission Commander, Easy)
     await waitScene(page, 'RoleSelect');
     await page.keyboard.press('Enter');
+    // E1: then the mission (Moon Landing is the default)
+    await waitScene(page, 'MissionSelect');
+    await page.keyboard.press('Enter');
     // Chapter 2: the build
     await waitScene(page, 'Hangar');
     await page.waitForTimeout(2600);

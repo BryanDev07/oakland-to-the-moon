@@ -90,8 +90,8 @@ export const mbPerDay = (kbps: number, contactFraction: number) => (kbps * 86_40
 export const signalDelayS = (miles: number) => miles / LIGHT_MILES_PER_S.v;
 
 /** #14 Shield health = (rating mph ÷ 24,400), max 100%, minus emergency damage. */
-export function shieldHealth(ratingMph: number, damage = 0): number {
-  return Math.min(1, ratingMph / SHIELD_REQUIRED_MPH.v) - damage;
+export function shieldHealth(ratingMph: number, damage = 0, requiredMph: number = SHIELD_REQUIRED_MPH.v): number {
+  return Math.min(1, ratingMph / requiredMph) - damage; // E2: 17,500 mph from the ISS
 }
 export function shieldResult(health: number): 'safe' | 'rough' | 'burnthrough' {
   return health >= 0.9999 ? 'safe' : health >= 0.9 ? 'rough' : 'burnthrough';

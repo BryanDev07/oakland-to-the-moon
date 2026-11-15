@@ -230,6 +230,8 @@ export interface SpecDesign {
   fixes: FixId[];
   difficulty: Difficulty;
   role: RoleId | null;
+  /** E1: which mission (optional; older saves are the Moon landing). */
+  mission?: 'moon' | 'iss';
   /** D3: the player's role decisions made during design (optional; older saves have none). */
   roleLog?: { id: string; pick: number; label: string; good: string; bad: string; costUsd?: number; flags?: string[] }[];
 }

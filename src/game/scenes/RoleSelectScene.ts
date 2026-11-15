@@ -103,6 +103,6 @@ export class RoleSelectScene extends Phaser.Scene {
     audio.sfx('success');
     store.design.spec = { ...(store.design.spec ?? {}), role: this.role, difficulty: this.difficulty };
     store.saveDesign();
-    fadeTo(this, 'Hangar', { tutorial: true });
+    fadeTo(this, 'MissionSelect'); // E1: then pick the mission
   }
 }

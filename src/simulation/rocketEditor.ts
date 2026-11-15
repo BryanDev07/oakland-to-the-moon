@@ -5,7 +5,7 @@
  */
 import type { Design } from '../data/mission';
 import {
-  BOOSTER_BY_ID, BOOSTERS, ENGINE_BY_ID, ENGINES, FixId, FuelId, MATERIALS, MaterialId, MIN_LIFTOFF_TWR, MIN_UPPER_TWR, MISSION_DV,
+  BOOSTER_BY_ID, BOOSTERS, ENGINE_BY_ID, ENGINES, FixId, FuelId, MATERIALS, MaterialId, MIN_LIFTOFF_TWR, MIN_UPPER_TWR,
   PROPELLANTS, RocketBuild, ROCKET_PRESETS, StageBuild,
 } from '../data/specParts';
 import { assessRisks, ActiveRisk } from './stack';
@@ -96,7 +96,7 @@ export function rocketReadout(d: Design) {
   return {
     liftoffLb: kgToLb(R.liftoffKg), twr: R.twr, twrOk: R.twr >= MIN_LIFTOFF_TWR.v,
     upper: R.upperTwr, upperOk: R.upperTwr >= MIN_UPPER_TWR.v,
-    dv: R.dvTotal, dvOk: R.dvTotal >= MISSION_DV.toMoon,
+    dv: R.dvTotal, dvOk: R.dvTotal >= R.target, target: R.target,
   };
 }
 export const stageOf = (b: RocketBuild, n: StageNo): StageBuild => b[key(n)];
