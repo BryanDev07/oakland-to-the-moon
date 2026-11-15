@@ -1,49 +1,46 @@
 # Development Status
 
-_Last updated: 2026-11-13 (initial autonomous development session)._
+_Last updated: 2026-11-15 (pre-submission fixes, branch `final-presubmission-fixes`)._
 
 ## Verified
 | Check | Command | Result |
 |---|---|---|
-| Type check + production build | `npm run build` | ✓ (Phaser chunk 1.2 MB / 319 kB gzip; game code 184 kB / 66 kB gzip) |
-| Simulation unit tests | `npm run test` | ✓ 52 / 52 |
-| Browser E2E (Chrome, 1366×768) | `npm run test:e2e` | ✓ 3 / 3: boot + fit + FPS; **full mission through the UI** (title → report); scene/save robustness |
-| Load time / FPS (local preview) | E2E test 1 | ~1.6–1.8 s to title; ~60 FPS |
-| Screenshots | `docs/screenshots/*.png` | 17 captured by the E2E run and visually inspected |
+| Type check + production build | `npm run build` | ✓ no warnings (Phaser chunk 1.2 MB / 319 kB gzip) |
+| Unit tests | `npm run test` | ✓ 195 / 195 (24 files) |
+| Browser tests (Chrome, 1366×768) | `npm run test:e2e` | ✓ 7 / 7: boot + fit + FPS; **full Moon mission through the UI** (title → report, FULL MISSION SUCCESS); scene robustness and corrupted save; quick start; save + reload + CONTINUE; text fit; **full ISS mission** (dock, spacewalk, home). Every test checks for page errors: none. |
+| Load time / FPS (local preview) | e2e test 1 | ~1.6 s to the title; ~60 FPS |
+| Viewports | Playwright, manual script | 1920×1080, 1366×768, 1024×576, 800×600: no console errors, no text past the screen |
+| Repository subpath | dist/ served at `/oakland-to-the-moon/` | Title and hangar load, no failed requests (GitHub Pages layout) |
+| Screenshots | `npm run screenshots` | `docs/screenshots/01-18`, regenerated from the current build |
 
-## Feature checklist
-**Complete (P0)**: build/run; title; Oakland intro (playable walk, dialogue, parallax, animated
-town); mission-control briefing; hangar with 33 components in 13 slots + mission plan, live
-visual spacecraft, meters, comparison deltas, undo, hint/reference design; design review
-(blocking vs warnings, fixes, culprits); launch cinematic with staging & telemetry; operations
-(time warp, power/thermal/life-support/data/comms simulation, eclipses, LOS, instruments, modes);
-LOI / free-return abort / descent / abort-home / TEI decisions; interactive landing (manual +
-autopilot, TRN hazard map, abort); surface EVA (9 activities, samples vs ascent Δv, rest days);
-entry/parachutes/splashdown/Oakland homecoming; transparent report; procedural art; tests.
-
-**Complete (P1)**: 8 context-aware emergencies with seeded scheduling; launch-vehicle
-underperformance; procedural chiptune music & SFX with volume/mute; save/continue; run history
-and previous-run comparison; educational notes, coaching toasts, glossary; chapter cards and fades;
-settings (text speed, shake, scanlines).
-
-**Partial**
-- Keyboard support covers primary actions (Enter/Esc/1–4/Space/flight keys) but not full
-  arrow-key focus navigation of every button.
-- Integer-only pixel scaling is not enforced (FIT scaling with nearest-neighbor filtering).
-- NASA references are listed but were not fetched/reviewed in-session (see SOURCES.md).
-
-**Not implemented (P2)**: extra mission scenarios, achievements, unlockables, expanded dialogue.
+## Fixed on 2026-11-15 (pre-submission audit)
+- Flight burns used a 300 s Isp fallback instead of the capsule's engine (314-316 s), so flight
+  propellant margins were smaller than the design review showed (reference design: 923 kg in
+  review, 350 kg in flight). They now match; regression test `tests/unit/ispConsistency.test.ts`.
+- Landing-site text claimed polar sites cost extra Δv; the model sets Δv by lunar orbit only. The text now says so.
+- The upper-stage push check warned on every preset rocket, and players could not clear it. It is now a learning
+  note on presets and still a warning on custom rockets.
+- CAPCOM messages covered the hangar's Mission Plan, the flight panels and the EVA list. They now appear over
+  each scene's artwork. Panel headers no longer run under the fullscreen and gear icons; cut-off hangar
+  labels were replaced with whole words.
+- Quick start on the title screen (or Q) for judges; Enter no longer starts a mission while a
+  window is open on the title.
+- Browser tests no longer rewrite tracked screenshots; GitHub Pages workflow added.
 
 ## Known limitations
-- Coast phases default to 1× (1 sim-hour per second); players should use 4×/16×.
-- The E2E full-mission test takes ~4 minutes because it plays in real time.
-- Audio cannot be verified by automated tests (Web Audio runs; output not inspected).
+- Easy mode is forgiving: the scripted e2e run (suggested build, autopilot, option A on every
+  emergency) scores 100 / S. Hard mode is the intended challenge.
+- Simplifications are listed in `docs/SCIENTIFIC_ASSUMPTIONS.md` (no site Δv, booster-phase
+  shortcut, no lunar night, fixed docking fuel).
+- Pixel scaling is FIT, not integer-only: at 1366×768 pixels are slightly uneven in size.
+- `window.__ottm` test hooks (scene jump, fast-forward) are present in the production build.
+- Audio is synthesized at runtime and was not checked by ear in automated tests.
+- The full-mission browser test takes about 4 minutes because it plays in real time.
 
 ## Continue from here
 ```bash
 npm install && npm run dev
 npm run test && npm run test:e2e
-npm run assets   # after editing scripts/generate-assets/*
+npm run screenshots   # refresh docs/screenshots
+npm run assets        # after editing scripts/generate-assets/*
 ```
-Highest-impact next task: a guided first-time tutorial overlay in the hangar (pointing at each
-meter and the first red category), plus arrow-key focus navigation for all buttons.
