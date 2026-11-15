@@ -57,7 +57,9 @@ export function costliestCall(rep: MissionReport): string | null {
 
 export function endSummary(s: MissionState, rep: MissionReport): EndSummary {
   const sp = specOf(s.design);
-  const lk = missionLikeness(sp.architecture, sp.orbit, sp.capsule);
+  const lk = s.iss
+    ? { like: 'a hybrid' as Likeness, why: 'An ISS crew flight: dock, spacewalk and come home, like Crew Dragon and Soyuz missions do.' }
+    : missionLikeness(sp.architecture, sp.orbit, sp.capsule);
   const ms = margins(s);
   const thin = ms[0];
   const margin = thin
@@ -69,8 +71,8 @@ export function endSummary(s: MissionState, rep: MissionReport): EndSummary {
   const sci = Math.round(rep.sciencePoints);
   let outcome: string;
   switch (rep.outcome) {
-    case 'FULL_SUCCESS': outcome = `It worked: the crew landed, came home safe and brought back ${sci} science points (50 needed).`; break;
-    case 'PARTIAL_SUCCESS': outcome = s.landing.outcome === 'soft' || s.landing.outcome === 'hard'
+    case 'FULL_SUCCESS': outcome = s.iss ? `It worked: you docked with the ISS, fixed the solar panel and brought the crew home (repair ${Math.round(s.iss.quality * 100)}%).` : `It worked: the crew landed, came home safe and brought back ${sci} science points (50 needed).`; break;
+    case 'PARTIAL_SUCCESS': outcome = s.iss ? 'Partly: you docked with the ISS and came home, but the panel was not fixed.' : s.landing.outcome === 'soft' || s.landing.outcome === 'hard'
       ? `Partly: the crew came home, but with ${sci} of the 50 science points needed.`
       : `Partly: the crew came home safe but never landed (${sci} science points).`; break;
     case 'ABORT_SAFE': outcome = `The mission was called off, but the crew is safe. ${E?.abortReason ?? rep.failures[0] ?? ''}`.trim(); break;
@@ -78,6 +80,6 @@ export function endSummary(s: MissionState, rep: MissionReport): EndSummary {
   }
   const costliest = costliestCall(rep);
   const extra = E && E.extraCostM > 0 ? `Emergencies added ${fmtUsdM(E.extraCostM)} to the bill.` : '';
-  const lines = [`Your mission is most like ${lk.like}.`, lk.why, outcome, margin, ...(costliest ? [`Costliest call: ${costliest}`] : []), ...(extra ? [extra] : [])].filter(Boolean);
+  const lines = [s.iss ? 'Your mission: ISS Rescue, dock and spacewalk.' : `Your mission is most like ${lk.like}.`, lk.why, outcome, margin, ...(costliest ? [`Costliest call: ${costliest}`] : []), ...(extra ? [extra] : [])].filter(Boolean);
   return { like: lk.like, likeWhy: lk.why, outcome, margin, costliest, extra, lines };
 }

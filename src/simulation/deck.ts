@@ -19,15 +19,18 @@ import { INSTRUMENTS, LIFE_SUPPORT_LB } from '../data/specParts';
 import {
   abortMission, applyLanding, isp, landerMass, lifeboatReturn, log, loseCrew, propMarginKg, totalMass, turnBack,
 } from './mission';
+import { ISS_CARDS, ISS_SHARED, ISS_TAGS } from './issDeck';
+import { isIss } from '../data/missionConfig';
 
-export type Stage = 'pad' | 'launch' | 'earthOrbit' | 'coast' | 'lunarOrbit' | 'landing' | 'surface' | 'return';
-export const STAGE_ORDER: Stage[] = ['pad', 'launch', 'earthOrbit', 'coast', 'lunarOrbit', 'landing', 'surface', 'return'];
+export type Stage = 'pad' | 'launch' | 'earthOrbit' | 'coast' | 'lunarOrbit' | 'landing' | 'surface' | 'return' | 'docking' | 'spacewalk';
+export const STAGE_ORDER: Stage[] = ['pad', 'launch', 'earthOrbit', 'coast', 'docking', 'spacewalk', 'lunarOrbit', 'landing', 'surface', 'return'];
 export const STAGE_LABEL: Record<Stage, string> = {
   pad: 'ON THE PAD', launch: 'DURING LAUNCH', earthOrbit: 'IN EARTH ORBIT', coast: 'COAST TO THE MOON',
   lunarOrbit: 'LUNAR ORBIT', landing: 'LANDING', surface: 'ON THE SURFACE', return: 'COMING HOME',
+  docking: 'DOCKING WITH THE ISS', spacewalk: 'ON THE SPACEWALK',
 };
 /** Stages handled by a scene hook (launch, landing, surface) rather than the coast timeline. */
-export const SCENE_STAGES: Stage[] = ['pad', 'launch', 'earthOrbit', 'landing', 'surface'];
+export const SCENE_STAGES: Stage[] = ['pad', 'launch', 'earthOrbit', 'landing', 'surface', 'docking', 'spacewalk'];
 export const FD_BONUS = 50; // G
 export const RETRY_PENALTY = 100; // G: mission points per landing retry on Hard (Easy retries are free)
 export const EASY_CARDS = 3, HARD_CARDS = 5;
@@ -121,7 +124,7 @@ function failOrAbort(s: MissionState, c: Ctx, reason: string): string {
 function launchHit(s: MissionState, dv: number, why: string): string {
   const e = em(s);
   e.rocketSpare -= dv;
-  if (e.rocketSpare < 0) { abortMission(s, `${why} The rocket fell ${fmt(-e.rocketSpare)} m/s short of the Moon; the crew came home from Earth orbit.`); return `${why} The rocket is ${fmt(-e.rocketSpare)} m/s short: abort to Earth orbit, crew safe.`; }
+  if (e.rocketSpare < 0) { abortMission(s, `${why} The rocket fell ${fmt(-e.rocketSpare)} m/s short of ${isIss(s.design) ? 'the station' : 'the Moon'}; the crew came home from Earth orbit.`); return `${why} The rocket is ${fmt(-e.rocketSpare)} m/s short: abort to Earth orbit, crew safe.`; }
   return `${why} Rocket margin now ${fmt(e.rocketSpare)} m/s.`;
 }
 
@@ -350,7 +353,7 @@ export const DECK: Card[] = [
     ],
   },
 ];
-export const DECK_BY_ID: Record<string, Card> = Object.fromEntries(DECK.map((c) => [c.id, c]));
+export const DECK_BY_ID: Record<string, Card> = Object.fromEntries([...DECK, ...ISS_CARDS].map((c) => [c.id, c]));
 
 function brokenInstrument(s: MissionState) {
   return s.stats.parts.find((p) => p.onLander && p.slot === 'science' && s.landing.damaged !== p.id);
@@ -377,7 +380,7 @@ export function buildCard(card: Card, s: MissionState, stage: Stage): PendingEve
   const c: Ctx = { k: easy ? 0.5 : 1, easy, fixed: false, rng: null as unknown as Rng }; // Good/Bad lines never roll
   return {
     id: card.id, title: `${card.n}. ${card.title}`, text: card.text(s), learn: '',
-    stage: STAGE_LABEL[stage], real: card.real, scenario: !!card.scenario, hint: easy ? card.hint : undefined,
+    stage: STAGE_LABEL[stage], real: card.real, scenario: !!card.scenario, hint: easy ? card.hint : undefined, tag: ISS_TAGS[card.id],
     fdPick: card.fd(s),
     options: card.options.map((o, i) => ({ label: `${'ABC'[i]}. ${o.label}`, detail: '', good: o.good(s, c), bad: o.bad(s, c) })),
   };
@@ -396,6 +399,7 @@ export function resolveCard(card: Card, s: MissionState, option: number, rng: Rn
 export function scheduleDeck(s: MissionState, rng: Rng): MissionState['schedule'] {
   const hard = specOf(s.design).difficulty === 'hard';
   const n = hard ? HARD_CARDS : EASY_CARDS;
+  if (isIss(s.design)) return scheduleIssDeck(s, rng, n, hard); // E5: the ISS deck
   const pool = DECK.filter((c) => c.eligible(s));
   const picks: { card: Card; stage: Stage }[] = [];
   while (picks.length < n && pool.length) {
@@ -424,5 +428,30 @@ export function scheduleDeck(s: MissionState, rng: Rng): MissionState['schedule'
     same.forEach((e, i) => { if (i > 0 && e.at < same[i - 1].at + 4 * H) e.at = same[i - 1].at + 4 * H; });
   }
   void log;
+  return out;
+}
+
+/**
+ * E5: the ISS deck. Draws from cards 1, 2, 11 (shared), the ISS versions of 12 and 15, and the four
+ * ISS cards. Catch-up cards play during the 1-day phasing coast; docking and spacewalk cards are fired
+ * by those scenes.
+ */
+function scheduleIssDeck(s: MissionState, rng: Rng, n: number, hard: boolean): MissionState['schedule'] {
+  const stageOf = (c: Card): Stage => (ISS_SHARED[c.id] as Stage | undefined) ?? c.stages[0];
+  const pool: Card[] = [...DECK.filter((c) => ISS_SHARED[c.id]), ...ISS_CARDS];
+  const picks: { card: Card; stage: Stage }[] = [];
+  while (picks.length < n && pool.length) {
+    const card = rng.weighted(pool, (c) => (hard ? c.weakSpot(s) : 1));
+    if (!card) break;
+    pool.splice(pool.indexOf(card), 1);
+    picks.push({ card, stage: stageOf(card) });
+  }
+  picks.sort((a, b) => STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage) || a.card.n - b.card.n);
+  const H = K.HOUR;
+  const out: MissionState['schedule'] = picks.map((p) => p.stage === 'coast'
+    ? { id: p.card.id, at: rng.range(2 * H, 18 * H), phases: ['TRANSIT_OUT'] as Phase[], stage: p.stage }
+    : { id: p.card.id, at: 0, phases: [] as Phase[], stage: p.stage });
+  const coast = out.filter((e) => e.stage === 'coast').sort((a, b) => a.at - b.at);
+  coast.forEach((e, i) => { if (i > 0 && e.at < coast[i - 1].at + 3 * H) e.at = coast[i - 1].at + 3 * H; });
   return out;
 }

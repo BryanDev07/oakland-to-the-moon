@@ -18,6 +18,7 @@ import { analyzeDesign } from './spacecraft';
 import { rocketOf, specOf } from './specModel';
 import type { MissionState, Phase } from './types';
 import { fmt, fmtUsd, kgToLb } from './units';
+import { isIss } from '../data/missionConfig';
 
 export type RoleMoment = 'design1' | 'design2' | 'flight3' | 'flight4';
 export interface RoleLogEntry { id: string; pick: number; label: string; good: string; bad: string; costUsd?: number; flags?: string[] }
@@ -230,6 +231,7 @@ export function dueDesignCard(d: Design, when: 'design1' | 'design2'): DesignCar
   const role = roleOfDesign(d);
   if (!role) return null;
   const c = DESIGN_CARDS.find((x) => x.role === role && x.when === when);
+  if (c && isIss(d) && (c.id === 'sc2' || c.id === 'sci2')) return null; // lander and landing site: Moon only
   return c && !log(d).some((e) => e.id === c.id) ? c : null;
 }
 /** Apply a design pick: the design changes and the pick is logged (with any cost line and flags). */

@@ -77,6 +77,16 @@ the code was written; please report any link that has moved.
 | Risk table: composite hydrogen tank | X-33, 1999 (Wikipedia) — https://en.wikipedia.org/wiki/Lockheed_Martin_X-33 |
 | Risk table: carbon bottle in liquid oxygen | 2016 Falcon 9 pad explosion (CompositesWorld) — https://compositesworld.com/articles/spacex-announces-copvs-role-in-sept-rocket-explosion |
 
+### ISS mission deck
+| Card | Source |
+|---|---|
+| 11. Small cabin leak (shared) | Soyuz MS-09, 2018 (NBC News), above |
+| 12. Thrusters failing during docking (ISS version) | Starliner, 2024 (Space.com), above |
+| 18. Water in the spacewalker's helmet | TODO (Joseph): add a source link for Luca Parmitano's 2013 helmet leak. Labelled "Scenario based on a real event" in game until then. |
+| 19. Tool bag floats away | TODO (Joseph): add a source link for the tool bag lost on a 2008 spacewalk. Labelled "Scenario based on a real event" in game until then. |
+| 20. Solar array tears while unfolding | TODO (Joseph): add a source link for the 2007 ISS array tear and spacewalk repair. Labelled "Scenario based on a real event" in game until then. |
+| 17. Debris avoidance | Scenario based on real events (the ISS regularly fires thrusters to dodge debris); no single source needed. |
+
 Cards **3, 6, 9, 10, 14 and 15** are made up but realistic: the game labels them
 "Scenario (made up, realistic)", never "this really happened". Card **13** (loss of signal behind
 the Moon) is labelled "Real effect": it is physics, not a single event.

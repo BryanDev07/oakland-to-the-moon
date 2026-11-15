@@ -14,13 +14,15 @@ import { ReturnScene } from './game/scenes/ReturnScene';
 import { ReportScene } from './game/scenes/ReportScene';
 import { RoleSelectScene } from './game/scenes/RoleSelectScene';
 import { MissionSelectScene } from './game/scenes/MissionSelectScene';
+import { DockingScene } from './game/scenes/DockingScene';
+import { SpacewalkScene } from './game/scenes/SpacewalkScene';
 import { DeskScene } from './game/scenes/DeskScene';
 import { store } from './state/store';
 import { audio } from './game/audio/audio';
 import * as debug from './state/debug';
 import { emergencyUI } from './game/ui/emergency';
 
-const scenes: Phaser.Types.Scenes.SceneType[] = [BootScene, TitleScene, IntroScene, BriefingScene, RoleSelectScene, MissionSelectScene, HangarScene, DeskScene, ReviewScene, LaunchScene, OpsScene, LandingScene, SurfaceScene, ReturnScene, ReportScene, OverlayScene];
+const scenes: Phaser.Types.Scenes.SceneType[] = [BootScene, TitleScene, IntroScene, BriefingScene, RoleSelectScene, MissionSelectScene, HangarScene, DeskScene, ReviewScene, LaunchScene, OpsScene, DockingScene, SpacewalkScene, LandingScene, SurfaceScene, ReturnScene, ReportScene, OverlayScene];
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -48,6 +50,9 @@ window.addEventListener('keydown', (e) => {
   if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) game.scale.toggleFullscreen();
 });
 
+const sceneLog: string[] = [];
+game.events.once('ready', () => { for (const sc of game.scene.scenes) sc.sys.events.on('create', () => sceneLog.push(sc.scene.key)); });
+
 // Test / debugging hooks (used by Playwright).
 declare global { interface Window { __ottm: unknown } }
 window.__ottm = {
@@ -56,6 +61,8 @@ window.__ottm = {
   audio,
   debug,
   emergencyOpen: () => emergencyUI.open,
+  /** Every scene started this session, in order (the ISS e2e checks Landing and Surface never ran). */
+  sceneLog,
   /** A3: visible text that runs past the screen or was cut off with an ellipsis, in the active scenes. */
   textOverflow: () => {
     const bad: string[] = [];

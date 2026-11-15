@@ -26,6 +26,7 @@ export class SurfaceScene extends Phaser.Scene {
   constructor() { super('Surface'); }
 
   create() {
+    if (store.mission?.iss) { fadeTo(this, 'Report'); return; } // safety net: the ISS mission never lands on the Moon
     fadeIn(this);
     const s = store.mission;
     if (!s || s.phase !== 'SURFACE') { fadeTo(this, s ? 'Ops' : 'Title'); return; }
