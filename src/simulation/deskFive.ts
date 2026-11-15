@@ -52,7 +52,7 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
       g('Stage 2 starting weight', s2StartN, 'N', 'Your spacecraft plus a full stage 2, in newtons.'),
       g('Stage 2 push / weight', R.upperTwr, '', upOk ? 'Strong enough to keep climbing.' : d.spec?.rocket ? 'Too weak: the stage wastes fuel fighting gravity.' : 'Under 0.3: a real stage loses a little fuel to gravity. The game leaves that out.', 0.01),
     ],
-    target: `Thrust-to-weight 1.2+ at liftoff; stage 2 at ${MIN_UPPER_TWR.v}+.`,
+    target: d.spec?.rocket ? `Thrust-to-weight 1.2+ at liftoff; stage 2 at ${MIN_UPPER_TWR.v}+.` : `Thrust-to-weight 1.2+ at liftoff.`, // stage 2 is a learning note on preset rockets
     example: liftoff.example,
     verdict: () => {
       const t = twr.verdict();
