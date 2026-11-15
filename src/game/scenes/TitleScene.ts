@@ -88,7 +88,7 @@ export class TitleScene extends Phaser.Scene {
   howTo() {
     modal(this, {
       title: 'HOW TO PLAY',
-      text: 'Lead the TOWN-1 crew from Oakland to the Moon and back.\n\n1. BUILD: pick spacecraft systems in the hangar. Watch mass, budget, power and Δv.\n2. REVIEW: fix every red (blocking) item before launch.\n3. FLY: manage power, data and life support. Respond to emergencies.\n4. LAND: fly the lander (arrows / W A S D, or the autopilot).\n5. EXPLORE: spend EVA hours on science, then get the crew home.\n\nMouse: click everything. Keys: Enter = confirm, Esc = pause & settings, 1-4 = choose options.',
+      text: 'Lead the TOWN-1 crew from Oakland to the Moon (or the ISS) and back.\n\n1. BUILD: pick spacecraft systems in the hangar. Watch mass, budget, power and Δv.\n2. CHECK: work through the Calculation Desk sheets.\n3. REVIEW: fix every red (blocking) item before launch.\n4. FLY: manage power, data and life support. Respond to emergencies.\n5. LAND: fly the lander (arrows / W A S D, or the autopilot).\n6. EXPLORE: spend EVA hours on science, then get the crew home.\n\nMouse: click everything. Keys: Enter = confirm, Esc = pause & settings, 1-4 = choose options, F = fullscreen. QUICK START (Q) skips the story.',
       options: [{ label: 'Got it!' }], onChoose: () => undefined, width: 360,
     });
   }
