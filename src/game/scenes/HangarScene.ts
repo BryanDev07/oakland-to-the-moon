@@ -12,8 +12,9 @@ import { CAPSULE_OWNED_SLOTS, missionDv, specOf } from '../../simulation/specMod
 import { CAPSULES, ORBITS, OrbitId, SpecDesign } from '../../data/specParts';
 import { ARCH_RUNDOWN, CAPSULE_RUNDOWN, ORBIT_RUNDOWN, STYLE_RUNDOWN } from '../../data/missionStyle';
 import { fmt, fmtUsd, fmtUsdM, kgToLb } from '../../simulation/units';
+import { renderRocketTab } from './hangarRocket';
 
-type Cat = SlotId | 'plan' | 'style';
+type Cat = SlotId | 'plan' | 'style' | 'rocket';
 const FLOOR_Y = 209;
 
 export class HangarScene extends Phaser.Scene {
@@ -56,14 +57,14 @@ export class HangarScene extends Phaser.Scene {
     // left: categories
     panel(this, 2, 2, 104, 210, 'panel');
     txt(this, 54, 7, 'SYSTEMS', { align: 'center', color: C.gold });
-    const cats: { id: Cat; label: string; icon: string }[] = [{ id: 'plan', label: 'Mission Plan', icon: 'rocket' }, ...(SPEC_MODEL ? [{ id: 'style' as Cat, label: 'Mission Style', icon: 'earth' }] : []), ...SLOTS.filter((s) => !(SPEC_MODEL && CAPSULE_OWNED_SLOTS.includes(s.id))).map((s) => ({ id: s.id as Cat, label: s.label, icon: s.icon }))];
+    const cats: { id: Cat; label: string; icon: string }[] = [{ id: 'plan', label: 'Mission Plan', icon: 'rocket' }, ...(SPEC_MODEL ? [{ id: 'rocket' as Cat, label: 'Rocket', icon: 'engine' }, { id: 'style' as Cat, label: 'Mission Style', icon: 'earth' }] : []), ...SLOTS.filter((s) => !(SPEC_MODEL && CAPSULE_OWNED_SLOTS.includes(s.id))).map((s) => ({ id: s.id as Cat, label: s.label, icon: s.icon }))];
     cats.forEach((c, i) => {
       const y = 19 + i * 13.6;
       const bg = this.add.rectangle(6, y, 96, 13, 0x2a4c98, 0).setOrigin(0, 0).setInteractive({ useHandCursor: true });
       icon(this, 8, y + 0.5, c.icon);
       const label = txt(this, 22, y + 2, c.label, { color: C.text });
       const status = this.add.image(90, y + 0.5, 'icons', iconFrame('ok')).setOrigin(0, 0);
-      bg.on('pointerover', () => { bg.setFillStyle(0x2a4c98, 0.5); audio.sfx('move'); const s = SLOTS.find((x) => x.id === c.id); Tooltip.show(this, c.id === 'style' ? 'Capsule, lunar orbit and architecture: Apollo-style or Artemis-style.' : s ? s.help : 'Rocket, landing site, crew size, surface stay and operations tempo.', { x: 112, y, abs: true }); }); // right of the list
+      bg.on('pointerover', () => { bg.setFillStyle(0x2a4c98, 0.5); audio.sfx('move'); const s = SLOTS.find((x) => x.id === c.id); Tooltip.show(this, c.id === 'rocket' ? 'Engines, fuel, tank material and boosters for each stage.' : c.id === 'style' ? 'Capsule, lunar orbit and architecture: Apollo-style or Artemis-style.' : s ? s.help : 'Rocket, landing site, crew size, surface stay and operations tempo.', { x: 112, y, abs: true }); }); // right of the list
       bg.on('pointerout', () => { Tooltip.hide(); this.refresh(); });
       bg.on('pointerup', () => { audio.sfx('select'); this.selectCat(c.id); });
       this.catRows.push({ cat: c.id, bg, status, label });
@@ -210,6 +211,7 @@ export class HangarScene extends Phaser.Scene {
     for (const r of this.catRows) {
       let st: string = 'ok';
       if (r.cat === 'plan') st = planBad ? 'fail' : 'ok';
+      else if (r.cat === 'rocket') st = this.review.checks.some((c) => c.id === 'launch_mass' && c.status === 'fail') ? 'fail' : this.review.checks.some((c) => c.id === 'upper_push' && c.status !== 'pass') ? 'warn' : 'ok';
       else if (r.cat === 'style') st = this.review.checks.some((c) => ['propulsion', 'capsule', 'shield', 'lander_dv'].includes(c.id) && c.status === 'fail') ? 'fail' : 'ok';
       else {
         const slot = SLOTS.find((x) => x.id === r.cat)!;
@@ -235,6 +237,7 @@ export class HangarScene extends Phaser.Scene {
     const v = list[(list.indexOf(cur) + d + list.length) % list.length];
     this.change(() => { this.design.spec = { ...specOf(this.design), [keys[this.styleRow]]: v } as SpecDesign; });
   }
+  rocketSection: 'stage1' | 'stage2' | 'boosters' = 'stage1';
   listPage = 0; // option list page (A3: rows that do not fit go onto pages, never under the detail box)
   selectCat(c: Cat) {
     if (c !== this.cat) this.listPage = 0;
@@ -253,6 +256,7 @@ export class HangarScene extends Phaser.Scene {
     const x0 = 326;
     if (this.cat === 'plan') { this.renderPlan(); return; }
     if (this.cat === 'style') { this.renderStyle(); return; }
+    if (this.cat === 'rocket') { renderRocketTab(this); return; }
     const slot = SLOTS.find((s) => s.id === this.cat)!;
     R.add(txt(this, 400, 7, slot.label.toUpperCase(), { align: 'center', color: C.gold }));
     R.add(txt(this, x0 + 2, 18, slot.multi ? 'Choose any' : 'Choose one', { color: C.dim }));
