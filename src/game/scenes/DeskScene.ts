@@ -3,7 +3,8 @@ import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, crt, fadeIn, fadeTo, gearButton, modal, modalState, onceKey, panel, txt, W, H } from '../ui/ui';
 import { analyzeDesign, DesignStats } from '../../simulation/spacecraft';
-import { buildSheets, checkAnswer, evalExpr, resultsBoard, Sheet, Step, warmer } from '../../simulation/calcDesk';
+import { checkAnswer, evalExpr, resultsBoard, Sheet, Step, warmer } from '../../simulation/calcDesk';
+import { buildFiveSheets } from '../../simulation/deskFive';
 import { specOf } from '../../simulation/specModel';
 import { fmt } from '../../simulation/units';
 
@@ -39,7 +40,7 @@ export class DeskScene extends Phaser.Scene {
     audio.music('build');
     this.stats = analyzeDesign(store.design);
     this.easy = specOf(store.design).difficulty !== 'hard';
-    this.sheets = this.stats.spec ? buildSheets(store.design, this.stats) : [];
+    this.sheets = this.stats.spec ? buildFiveSheets(store.design, this.stats) : []; // B1: five sheets
     this.idx = 0; this.calc = ''; this.feedback = ''; this.boardPage = 0;
     // pixel-art desk with a dark chalkboard sheet (high contrast for every colour role)
     this.add.rectangle(0, 0, W, H, 0x3b2414).setOrigin(0, 0);
@@ -160,7 +161,7 @@ export class DeskScene extends Phaser.Scene {
     store.design = a.apply(store.design);
     store.saveDesign();
     this.stats = analyzeDesign(store.design);
-    this.sheets = buildSheets(store.design, this.stats);
+    this.sheets = buildFiveSheets(store.design, this.stats);
     this.loadProgress();
     this.say(`Done. Rocket: ${fmt(this.stats.spec!.rocket.dvTotal)} m/s.`, COL.pass);
   }
