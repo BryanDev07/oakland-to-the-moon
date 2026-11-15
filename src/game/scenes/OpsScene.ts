@@ -12,6 +12,8 @@ import type { MissionState } from '../../simulation/types';
 import { missionDv } from '../../simulation/specModel';
 import { fmt, fmtLb, kgToLb } from '../../simulation/units';
 import { showEmergency } from '../ui/emergency';
+import { applyFlightPick, dueFlightCard, FlightCard } from '../../simulation/roleDecisions';
+import { showRoleCard } from '../ui/roleCard';
 
 const SPEEDS = [0, 12, 48, 192]; // sim steps (5 min each) per real second
 const PHASE_LABEL: Record<string, string> = {
@@ -251,6 +253,7 @@ export class OpsScene extends Phaser.Scene {
     const s = this.s;
     if (!s) return;
     if (s.pending && !this.modalOpen) this.showEvent();
+    else if (!this.modalOpen) { const rc = dueFlightCard(s); if (rc) this.showRole(rc); }
     if (!this.modalOpen && this.speed > 0 && Sim.isCoasting(s)) {
       this.acc += (dtMs / 1000) * SPEEDS[this.speed];
       let n = 0;
@@ -275,6 +278,19 @@ export class OpsScene extends Phaser.Scene {
       const last = s.decisions[s.decisions.length - 1];
       if (legacy && last?.result) toast(this, 'Mission Control', last.result, 'portrait_director', 5000);
       this.onPhase();
+    });
+  }
+
+  /** D3: a flight-time role decision (blue card); the clock waits while it is open. */
+  showRole(card: FlightCard) {
+    const s = this.s;
+    this.modalOpen = true;
+    showRoleCard(this, { title: card.title, text: card.text(s), tip: card.tip, options: card.options.map((o) => ({ label: o.label, good: o.good(s), bad: o.bad(s) })) }, (i) => {
+      const msg = applyFlightPick(s, card, i);
+      store.saveMission();
+      toast(this, 'Mission Control', msg, 'portrait_director', 4000);
+      this.modalOpen = false;
+      this.refreshControls();
     });
   }
 

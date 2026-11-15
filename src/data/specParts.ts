@@ -230,6 +230,8 @@ export interface SpecDesign {
   fixes: FixId[];
   difficulty: Difficulty;
   role: RoleId | null;
+  /** D3: the player's role decisions made during design (optional; older saves have none). */
+  roleLog?: { id: string; pick: number; label: string; good: string; bad: string; costUsd?: number; flags?: string[] }[];
 }
 
 /** The PART C acceptance-test rocket (SLS-like, carrying Orion). */

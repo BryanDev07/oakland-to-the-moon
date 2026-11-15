@@ -9,6 +9,8 @@ import { checkAnswer, evalExpr, resultsBoard, Sheet, Step, warmer } from '../../
 import { buildFiveSheets } from '../../simulation/deskFive';
 import { specOf } from '../../simulation/specModel';
 import { fmt } from '../../simulation/units';
+import { dueDesignCard, applyDesignPick } from '../../simulation/roleDecisions';
+import { showRoleCard } from '../ui/roleCard';
 
 /** Desk colour roles (readability spec): numbers from your build, numbers to add, pass, fail. */
 /** B2 paper: charcoal text on cream, small dark accents (all readable on #F5EFD8). */
@@ -189,7 +191,21 @@ export class DeskScene extends Phaser.Scene {
     this.say(`Done. Rocket: ${fmt(this.stats.spec!.rocket.dvTotal)} m/s.`, SCOL.pass);
   }
   toHangar() { fadeTo(this, 'Hangar'); }
-  launch() { fadeTo(this, 'Review'); }
+  launch() {
+    if (modalState.open) return;
+    // D3: the second design-time role decision comes as the design heads to the review
+    const card = dueDesignCard(store.design, 'design2');
+    if (card) {
+      const d = store.design;
+      showRoleCard(this, { title: card.title, text: card.text(d), tip: card.tip, options: card.options.map((o) => ({ label: o.label, good: o.good(d), bad: o.bad(d) })) }, (i) => {
+        store.design = applyDesignPick(store.design, card, i);
+        store.saveDesign();
+        this.launch();
+      });
+      return;
+    }
+    fadeTo(this, 'Review');
+  }
 
   // ------------------------------------------------------------------ the pencil (B2)
   /** A small SNES-style pencil, drawn once into a texture: graphite tip, wood, yellow body, band, eraser. */

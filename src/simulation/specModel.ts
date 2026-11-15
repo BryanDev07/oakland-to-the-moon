@@ -175,6 +175,8 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
     ...(packs ? [{ label: `${packs} x ${POWER_PARTS.liionPack.name} (lander)`, m: ((packs * POWER_PARTS.liionPack.priceUsd.v) / 1e6) * rm('spacecraft'), ids: [] as string[] }] : []),
     ...(solarOn ? [{ label: POWER_PARTS.landerSolar.name, m: (POWER_PARTS.landerSolar.priceUsd.v / 1e6) * rm('spacecraft'), ids: [] as string[] }] : []),
     ...sp.fixes.filter((f) => f !== 'spareSeal').map((f) => ({ label: FIXES[f].name, m: FIXES[f].costUsd.v / 1e6, ids: [] as string[] })),
+    // D3: costs of the player's design-time role decisions (budget reserve, launch delays)
+    ...(sp.roleLog ?? []).filter((e) => e.costUsd).map((e) => ({ label: `Role decision: ${e.label}`, m: e.costUsd! / 1e6, ids: [] as string[] })),
   ];
   const costM = costLines.reduce((s, l) => s + l.m, 0);
 

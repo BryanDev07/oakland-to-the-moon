@@ -14,6 +14,8 @@ import { CAPSULES, ORBITS, OrbitId, SpecDesign } from '../../data/specParts';
 import { ARCH_RUNDOWN, CAPSULE_RUNDOWN, ORBIT_RUNDOWN, STYLE_RUNDOWN } from '../../data/missionStyle';
 import { fmt, fmtUsd, fmtUsdM, kgToLb } from '../../simulation/units';
 import { renderRocketTab } from './hangarRocket';
+import { applyDesignPick, dueDesignCard } from '../../simulation/roleDecisions';
+import { showRoleCard } from '../ui/roleCard';
 
 type Cat = SlotId | 'plan' | 'style' | 'rocket';
 const FLOOR_Y = 209;
@@ -452,8 +454,18 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
   }
 
   goReview() {
+    if (modalState.open) return;
     store.design = cloneDesign(this.design);
     store.saveDesign();
+    // D3: the player's first role decision comes as the design heads to the desk
+    const card = SPEC_MODEL ? dueDesignCard(this.design, 'design1') : null;
+    if (card) {
+      showRoleCard(this, { title: card.title, text: card.text(this.design), tip: card.tip, options: card.options.map((o) => ({ label: o.label, good: o.good(this.design), bad: o.bad(this.design) })) }, (i) => {
+        this.change((d) => { const nd = applyDesignPick(d, card, i); Object.assign(d, nd); });
+        this.goReview();
+      });
+      return;
+    }
     fadeTo(this, SPEC_MODEL ? 'Desk' : 'Review'); // spec: the Calculation Desk sits between the hangar and launch
   }
 }

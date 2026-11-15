@@ -93,7 +93,7 @@ export const oxygenDays = (s: MissionState, leak = true) => kgToLb(s.o2Kg) / (s.
 const o2Need = (s: MissionState) => s.crewOnCsm * daysLeft(s) * K.O2_KG_PER_CREW_DAY * (1 - s.o2Recovery);
 const o2Margin = (s: MissionState) => s.o2Kg / Math.max(1e-6, o2Need(s)) - 1;
 /** Crew time costs supplies: 15 lb per crew-day. */
-function spendDays(s: MissionState, days: number) {
+export function spendDays(s: MissionState, days: number) {
   if (days <= 0) return;
   const n = Math.max(1, s.crewOnCsm);
   s.o2Kg -= n * days * K.O2_KG_PER_CREW_DAY;

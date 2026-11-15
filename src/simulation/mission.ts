@@ -14,6 +14,7 @@ import { missionDv, orbitGeom, specOf } from './specModel';
 import { shieldHealth, shieldResult } from './formulas';
 import { fmt, fmtLb } from './units';
 import type { DataSource, LogEntry, MissionState, Phase } from './types';
+import { applyRoleAtLaunch } from './roleDecisions';
 
 export type { MissionState, Phase } from './types';
 
@@ -55,6 +56,7 @@ export function createMission(design: Design, seed: number): MissionState {
   // Spec model: the 16-card A/B/C deck (deck.ts). Legacy events stay in events.ts for the old model.
   s.em = newEmergencyState(stats.spec?.rocket.spare ?? 0);
   s.schedule = K.SPEC_MODEL ? scheduleDeck(s, rng) : scheduleEvents(s, rng);
+  if (K.SPEC_MODEL) applyRoleAtLaunch(s); // D3: the player's design-time role decisions
   // Launch vehicle performance: chance of an upper-stage shortfall scales with LV unreliability.
   // Reliability rolls are OFF in the spec model (RELIABILITY_ROLLS): risk comes only from emergencies.
   const lv = LV_BY_ID[d.plan.lv];

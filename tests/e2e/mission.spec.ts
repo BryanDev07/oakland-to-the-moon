@@ -36,6 +36,8 @@ async function eva(p: Page, row: number, id: string) {
 }
 /** The Calculation Desk sits between the hangar and the review. */
 async function throughDesk(p: Page) {
+  // D3: the player's first role decision opens as the design heads to the desk; Enter takes option 1
+  for (let i = 0; i < 30 && !(await hooks(p)).includes('Desk'); i++) { if (await emergencyOpen(p)) await p.keyboard.press('Enter'); await p.waitForTimeout(200); }
   await waitScene(p, 'Desk');
   // S skips a sheet (the desk reveals steps one at a time); on the results board Enter launches
   for (let i = 0; i < 16; i++) { await p.keyboard.press('s'); await p.waitForTimeout(150); }
