@@ -9,7 +9,7 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, modal, onceKey, panel, pinToScreen, txt, W, H } from './ui';
+import { Button, C, Dialogue, onceKey, panel, pinToScreen, txt, W, H } from './ui';
 import * as Sim from '../../simulation/mission';
 import type { MissionState } from '../../simulation/types';
 import { specOf } from '../../simulation/specModel';
@@ -89,6 +89,11 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
     const msg = Sim.resolveEvent(s, i, armed);
     store.saveMission();
     if (ev!.fdPick === undefined) { done(); return; } // legacy event: the caller shows its own toast
-    modal(scene, { title: 'MISSION CONTROL', text: `${msg}${ev!.real ? `\nThis really happened: ${ev!.real}` : ''}`, options: [{ label: 'Continue' }], width: 440, onChoose: () => done() });
+    // Mission Control's answer in a paged dialogue box at the edge away from the action (A1)
+    const top = ['Launch', 'Landing', 'Surface'].includes(scene.scene.key);
+    const dlg = new Dialogue(scene, top ? 'top' : 'bottom');
+    pinToScreen(dlg);
+    dlg.setDepth(950);
+    dlg.play([{ who: 'Mission Control', text: msg, portrait: 'portrait_capcom' }], () => { dlg.destroy(); done(); });
   }
 }

@@ -54,7 +54,7 @@ export class SurfaceScene extends Phaser.Scene {
     new Button(this, 336, 243, 'LIFT OFF ▲', () => this.liftoff(), { w: 138, h: 20, style: 'go', tooltip: 'Leave the surface in the ascent stage and rendezvous with the capsule.' });
     gearButton(this);
     crt(this);
-    this.dlg = new Dialogue(this);
+    this.dlg = new Dialogue(this, 'top'); // the astronauts work at the bottom of the screen
     this.refresh();
     if (!s.surface.hoursOnSurface) {
       this.busy = true;

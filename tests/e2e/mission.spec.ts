@@ -43,15 +43,17 @@ async function throughDesk(p: Page) {
 }
 /** True while an emergency window (or its mission-control result) is open. */
 const emergencyOpen = (p: Page) => p.evaluate(() => (window as unknown as { __ottm: { emergencyOpen: () => boolean } }).__ottm.emergencyOpen());
+/** Enter picks the highlighted option on a card and pages Mission Control's answer (A1 dialogue box). */
+const answerKey = async (p: Page) => p.keyboard.press((await emergencyOpen(p)) ? 'Enter' : '1');
 /** Answer any open emergency with option 1 (A), then dismiss the mission-control result. */
 async function clearEmergencies(p: Page, timeout = 15000) {
   const end = Date.now() + timeout;
-  while (await emergencyOpen(p)) { if (Date.now() > end) throw new Error('emergency window never closed'); await p.keyboard.press('1'); await p.waitForTimeout(400); }
+  while (await emergencyOpen(p)) { if (Date.now() > end) throw new Error('emergency window never closed'); await answerKey(p); await p.waitForTimeout(400); }
 }
 /** Wait for a scene, answering emergencies that open on the way. */
 async function waitSceneClearing(p: Page, key: string, timeout = 30000) {
   const end = Date.now() + timeout;
-  while (!(await hooks(p)).includes(key)) { if (Date.now() > end) throw new Error(`timeout waiting for scene ${key}`); if (await emergencyOpen(p)) await p.keyboard.press('1'); await p.waitForTimeout(250); }
+  while (!(await hooks(p)).includes(key)) { if (Date.now() > end) throw new Error(`timeout waiting for scene ${key}`); if (await emergencyOpen(p)) await answerKey(p); await p.waitForTimeout(250); }
   await p.waitForTimeout(500);
 }
 /**
@@ -63,7 +65,7 @@ async function clickUntilPhase(p: Page, gx: number, gy: number, want: string, ti
   while (Date.now() < end) {
     if ((await phase(p)) === want) return;
     const pending = await p.evaluate(() => !!(window as unknown as { __ottm: Hooks }).__ottm.store.mission?.pending);
-    if (pending || (await emergencyOpen(p))) await p.keyboard.press('1'); else await click(p, gx, gy);
+    if (pending || (await emergencyOpen(p))) await answerKey(p); else await click(p, gx, gy);
     await p.waitForTimeout(1200);
   }
   throw new Error(`timeout waiting for phase ${want}`);
@@ -74,7 +76,7 @@ async function until(p: Page, cond: () => Promise<boolean>, timeout = 60000) {
   while (Date.now() < end) {
     if (await cond()) return;
     const pending = await p.evaluate(() => !!(window as unknown as { __ottm: Hooks }).__ottm.store.mission?.pending);
-    if (pending || (await emergencyOpen(p))) { await p.keyboard.press('1'); }
+    if (pending || (await emergencyOpen(p))) { await answerKey(p); }
     await p.waitForTimeout(250);
   }
   throw new Error('timeout waiting for condition');

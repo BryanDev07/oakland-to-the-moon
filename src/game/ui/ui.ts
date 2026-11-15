@@ -148,7 +148,14 @@ export const Tooltip = {
 // ----------------------------------------------------------------- Dialogue
 export interface Line { who: string; text: string; portrait?: string }
 const SPEEDS = { slow: 22, normal: 45, fast: 90, instant: 100000 };
+/**
+ * Character dialogue (Director Cole, CAPCOM Sam, Commander Kai, Mission Control). Readable 15 px text
+ * in a box no taller than about a quarter of the screen, anchored to the top or bottom edge (away
+ * from the action). Long lines are split into pages (click / Enter for the next page); the box never grows.
+ */
 export class Dialogue extends Phaser.GameObjects.Container {
+  static readonly H = 72; // 72 / 270: about a quarter of the screen
+  static readonly LINES = 3;
   lines: Line[] = [];
   idx = 0;
   shown = 0;
@@ -163,16 +170,18 @@ export class Dialogue extends Phaser.GameObjects.Container {
   private typing = false;
   private accum = 0;
   private keyHandler: (e: KeyboardEvent) => void;
-  constructor(scene: Phaser.Scene, y = H - 64) {
-    super(scene, 6, y);
-    const w = W - 12, h = 58;
+  /** where: 'bottom' (default), 'top', or an explicit y. */
+  constructor(scene: Phaser.Scene, where: number | 'top' | 'bottom' = 'bottom') {
+    const h = Dialogue.H;
+    super(scene, 6, typeof where === 'number' ? Math.min(where, H - h - 4) : where === 'top' ? 4 : H - h - 4);
+    const w = W - 12;
     this.frame = panel(scene, 0, 0, w, h, 'dialog');
-    this.portrait = scene.add.image(8, 5, 'portrait_kai').setOrigin(0, 0);
-    this.nameText = txt(scene, 62, 6, '', { color: C.gold2 });
-    this.bodyText = txt(scene, 62, 18, '', { maxWidth: w - 74, color: C.white });
+    this.portrait = scene.add.image(6, 6, 'portrait_kai').setOrigin(0, 0).setScale(0.75); // smaller portrait
+    this.nameText = txt(scene, 50, 5, '', { color: C.gold2 });
+    this.bodyText = txt(scene, 50, 17, '', { maxWidth: w - 64, color: C.white, size: 15 });
     this.arrow = scene.add.sprite(w - 14, h - 12, 'arrow', 0).setOrigin(0, 0);
     this.arrow.play('arrow-blink');
-    this.hint = txt(scene, w - 18, h - 12, 'CLICK', { align: 'right', color: C.dim });
+    this.hint = txt(scene, w - 18, h - 12, '', { align: 'right', color: 0x9fe0ff });
     this.add([this.frame, this.portrait, this.nameText, this.bodyText, this.arrow, this.hint]);
     this.setDepth(500);
     this.frame.setInteractive({ useHandCursor: true }).on('pointerup', () => this.advance());
@@ -183,8 +192,26 @@ export class Dialogue extends Phaser.GameObjects.Container {
     scene.add.existing(this);
     this.setVisible(false);
   }
+  /** Text width for a line (narrower when there is a portrait). */
+  private bodyX(l: Line) { return l.portrait && this.scene.textures.exists(l.portrait) ? 50 : 10; }
+  /** Split a line into pages of at most LINES wrapped lines at the box's width. */
+  paginate(l: Line): Line[] {
+    const w = W - 12 - this.bodyX(l) - 14;
+    const probe = txt(this.scene, 0, -999, '', { maxWidth: w, size: 15 });
+    const maxH = Dialogue.LINES * 16 + 2;
+    const pages: string[] = [];
+    let cur = '';
+    for (const word of l.text.split(/\s+/).filter(Boolean)) {
+      const next = cur ? `${cur} ${word}` : word;
+      probe.setText(next);
+      if (probe.height > maxH && cur) { pages.push(cur); cur = word; } else cur = next;
+    }
+    if (cur) pages.push(cur);
+    probe.destroy();
+    return pages.map((t) => ({ ...l, text: t }));
+  }
   play(lines: Line[], done?: () => void) {
-    this.lines = lines; this.idx = 0; this.done = done; this.setVisible(true); this.showLine();
+    this.lines = lines.flatMap((l) => this.paginate(l)); this.idx = 0; this.done = done; this.setVisible(true); this.showLine();
     return this;
   }
   private showLine() {
@@ -193,8 +220,8 @@ export class Dialogue extends Phaser.GameObjects.Container {
     const hasP = !!l.portrait && this.scene.textures.exists(l.portrait);
     this.portrait.setVisible(hasP);
     if (hasP) this.portrait.setTexture(l.portrait!);
-    const bx = hasP ? 62 : 10;
-    this.nameText.setX(bx); this.bodyText.setX(bx).setMaxWidth(W - 12 - bx - 12);
+    const bx = this.bodyX(l);
+    this.nameText.setX(bx); this.bodyText.setX(bx).setMaxWidth(W - 12 - bx - 14);
     this.full = l.text; this.shown = 0; this.typing = true; this.accum = 0;
     this.bodyText.setText('');
     this.arrow.setVisible(false); this.hint.setVisible(false);
@@ -204,11 +231,17 @@ export class Dialogue extends Phaser.GameObjects.Container {
     this.accum += (dt / 1000) * SPEEDS[store.settings.textSpeed];
     const n = Math.min(this.full.length, Math.floor(this.accum));
     if (n !== this.shown) { this.shown = n; this.bodyText.setText(this.full.slice(0, n)); if (n % 3 === 0) audio.sfx('blip'); }
-    if (n >= this.full.length) { this.typing = false; this.arrow.setVisible(true); this.hint.setVisible(true); }
+    if (n >= this.full.length) this.finishTyping();
+  }
+  private finishTyping() {
+    this.typing = false; this.shown = this.full.length; this.bodyText.setText(this.full);
+    const more = this.idx < this.lines.length - 1;
+    this.arrow.setVisible(true);
+    this.hint.setText(more ? 'MORE' : 'OK').setVisible(true);
   }
   advance() {
     if (!this.visible) return;
-    if (this.typing) { this.typing = false; this.shown = this.full.length; this.bodyText.setText(this.full); this.arrow.setVisible(true); this.hint.setVisible(true); return; }
+    if (this.typing) { this.finishTyping(); return; }
     audio.sfx('move');
     this.idx++;
     if (this.idx >= this.lines.length) { this.setVisible(false); const d = this.done; this.done = undefined; d?.(); return; }
@@ -308,20 +341,34 @@ export function pinToScreen<T extends Phaser.GameObjects.Container>(c: T): T {
 }
 
 // ----------------------------------------------------------------- Toast (mission control message)
-export function toast(scene: Phaser.Scene, who: string, text: string, portrait = 'portrait_capcom', ms = 4200) {
-  const c = scene.add.container(W - 256, 21).setDepth(800); // below the SKIP / fullscreen / gear buttons
-  const t = txt(scene, 34, 15, text, { maxWidth: 214, color: C.white, size: 15 });
-  if (t.height + 20 > H - 25) t.setFontSize(10).setMaxWidth(214); // never run off the screen
-  const h = Math.max(36, t.height + 21);
-  c.add(panel(scene, 0, 0, 252, h, 'dialog'));
-  const pi = scene.add.image(4, 4, portrait).setOrigin(0, 0).setScale(0.5);
-  c.add([pi, txt(scene, 34, 4, who.toUpperCase(), { color: C.gold2 }), t]);
-  pinToScreen(c);
-  c.setAlpha(0);
-  scene.tweens.add({ targets: c, alpha: 1, duration: 200 });
-  scene.time.delayedCall(ms, () => scene.tweens.add({ targets: c, alpha: 0, duration: 300, onComplete: () => c.destroy() }));
+export function toast(scene: Phaser.Scene, who: string, text: string, portrait = 'portrait_capcom', ms = 4200): Phaser.GameObjects.Container {
+  // never taller than about a third of the screen: long messages become a short chain of pages
+  const probe = txt(scene, 0, -999, '', { maxWidth: 214, size: 15 });
+  const pages: string[] = [];
+  let cur = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = cur ? `${cur} ${word}` : word;
+    probe.setText(next);
+    if (probe.height > 3 * 16 + 2 && cur) { pages.push(cur); cur = word; } else cur = next;
+  }
+  if (cur) pages.push(cur);
+  probe.destroy();
+  const show = (i: number): Phaser.GameObjects.Container => {
+    const c = scene.add.container(W - 256, 21).setDepth(800); // below the SKIP / fullscreen / gear buttons
+    const t = txt(scene, 34, 15, pages[i] ?? '', { maxWidth: 214, color: C.white, size: 15 });
+    const h = Math.max(36, t.height + 21);
+    c.add(panel(scene, 0, 0, 252, h, 'dialog'));
+    const pi = scene.add.image(4, 4, portrait).setOrigin(0, 0).setScale(0.5);
+    c.add([pi, txt(scene, 34, 4, `${who.toUpperCase()}${pages.length > 1 ? `  ${i + 1}/${pages.length}` : ''}`, { color: C.gold2 }), t]);
+    pinToScreen(c);
+    c.setAlpha(0);
+    scene.tweens.add({ targets: c, alpha: 1, duration: 200 });
+    const per = pages.length > 1 ? Math.max(2600, ms * 0.8) : ms;
+    scene.time.delayedCall(per, () => scene.tweens.add({ targets: c, alpha: 0, duration: 250, onComplete: () => { c.destroy(); if (i + 1 < pages.length && scene.sys.isActive()) show(i + 1); } }));
+    return c;
+  };
   audio.sfx('beep');
-  return c;
+  return show(0);
 }
 
 // ----------------------------------------------------------------- transitions & chrome
