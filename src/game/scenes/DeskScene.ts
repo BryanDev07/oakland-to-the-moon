@@ -160,7 +160,8 @@ export class DeskScene extends Phaser.Scene {
     return txt(this, x, y, s, { color, size, maxWidth, align });
   }
   btn(x: number, y: number, w: number, label: string, cb: () => void, tip?: string, style?: 'go') {
-    const b = new Button(this, x, y, label, cb, { w, h: 19, tooltip: tip, style });
+    void tip; // no hover tooltips on the desk: they covered NEXT / HANGAR and the answers (A2)
+    const b = new Button(this, x, y, label, cb, { w, h: 19, style });
     b.label.setFontSize(BODY).setY(2);
     return b;
   }
@@ -237,7 +238,7 @@ export class DeskScene extends Phaser.Scene {
       if (vd) S.add(this.t(330, 128, vd.pass ? 'PASS' : 'FAIL', vd.pass ? COL.pass : COL.fail, BIG, 142));
       else if (this.feedback) S.add(this.t(330, 150, this.feedback, this.feedbackColor, BODY, 142));
       const acts = done ? sh.actions ?? [] : [];
-      acts.forEach((a, k) => { const b = new Button(this, 328, 156 + k * 21, a.label.replace('USE THIS: ', 'USE '), () => this.act(a), { w: 144, h: 19, style: 'go', tooltip: 'Put this fuel in your rocket' }); b.label.setFontSize(BODY).setY(2); S.add(b); });
+      acts.forEach((a, k) => { const b = new Button(this, 328, 156 + k * 21, a.label.replace('USE THIS: ', 'USE '), () => this.act(a), { w: 144, h: 19, style: 'go' }); b.label.setFontSize(BODY).setY(2); S.add(b); });
       if (!acts.length) S.add(this.t(330, 180, done ? 'Enter: next sheet' : 'Enter: next step', COL.explain, BODY, 142));
     }
     S.add(this.btn(328, 222, 70, 'NEXT ▶', () => this.advance(), 'Next step (Enter or →)'));

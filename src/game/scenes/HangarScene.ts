@@ -63,7 +63,7 @@ export class HangarScene extends Phaser.Scene {
       icon(this, 8, y + 0.5, c.icon);
       const label = txt(this, 22, y + 2, c.label, { color: C.text });
       const status = this.add.image(90, y + 0.5, 'icons', iconFrame('ok')).setOrigin(0, 0);
-      bg.on('pointerover', () => { bg.setFillStyle(0x2a4c98, 0.5); audio.sfx('move'); const s = SLOTS.find((x) => x.id === c.id); Tooltip.show(this, c.id === 'style' ? 'Capsule, lunar orbit and architecture: Apollo-style or Artemis-style.' : s ? s.help : 'Rocket, landing site, crew size, surface stay and operations tempo.', { x: 108, y }); });
+      bg.on('pointerover', () => { bg.setFillStyle(0x2a4c98, 0.5); audio.sfx('move'); const s = SLOTS.find((x) => x.id === c.id); Tooltip.show(this, c.id === 'style' ? 'Capsule, lunar orbit and architecture: Apollo-style or Artemis-style.' : s ? s.help : 'Rocket, landing site, crew size, surface stay and operations tempo.', { x: 112, y, abs: true }); }); // right of the list
       bg.on('pointerout', () => { Tooltip.hide(); this.refresh(); });
       bg.on('pointerup', () => { audio.sfx('select'); this.selectCat(c.id); });
       this.catRows.push({ cat: c.id, bg, status, label });
@@ -90,7 +90,7 @@ export class HangarScene extends Phaser.Scene {
         lander: 'Lander Δv margin for descent and ascent with maximum samples.',
       };
       const hit = this.add.rectangle(m.x, m.y, 96, 20, 0, 0).setOrigin(0, 0).setInteractive();
-      hit.on('pointerover', () => Tooltip.show(this, tips[k], { x: m.x, y: m.y - 50 }));
+      hit.on('pointerover', () => Tooltip.show(this, tips[k], { x: m.x, y: m.y, width: 96, height: 20 }));
       hit.on('pointerout', () => Tooltip.hide());
     }
     this.summary = txt(this, 322, 220, '', { color: C.dim, maxWidth: 70 });
@@ -345,7 +345,7 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
     // educational note (hover for full), on the title line
     const learnBtn = txt(this, 472, y0, '▶ WHY', { color: C.teal, align: 'right' });
     learnBtn.setInteractive({ useHandCursor: true });
-    learnBtn.on('pointerover', () => Tooltip.show(this, `${comp.desc}${engine}\n\n${comp.learn}`, { x: 300, y: 120 }));
+    learnBtn.on('pointerover', () => Tooltip.show(this, `${comp.desc}${engine}\n\n${comp.learn}`, { x: 30, y: 40, abs: true }));
     learnBtn.on('pointerout', () => Tooltip.hide());
     D.add(learnBtn);
   }
@@ -383,7 +383,7 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
       const focus = ['CAPSULE', 'LUNAR ORBIT', 'ARCHITECTURE'].indexOf(label) === this.styleRow;
       const l = txt(this, x0 + 2, y, `${focus ? '> ' : ''}${label}`, { color: focus ? C.gold2 : C.dim });
       // the detail box may trim; the tooltip always shows the full rundown and numbers
-      const show = (t: string) => { this.planDetail(t); Tooltip.show(this, t, { x: 140, y: 150 }); };
+      const show = (t: string) => { this.planDetail(t); Tooltip.show(this, t, { x: 30, y: 40, abs: true }); };
       l.setInteractive({ useHandCursor: true }); l.on('pointerover', () => show(rundown)); l.on('pointerout', () => Tooltip.hide());
       R.add(l);
       const bw = Math.floor(146 / items.length) - 2;

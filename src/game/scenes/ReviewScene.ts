@@ -63,7 +63,7 @@ export class ReviewScene extends Phaser.Scene {
     this.detail = this.add.container(0, 0);
     new Button(this, 308, 244, '◀ HANGAR', () => fadeTo(this, 'Hangar'), { w: 70, h: 22 });
     const launch = new Button(this, 382, 244, 'LAUNCH ▶', () => this.poll(), { w: 94, h: 22, style: 'go', disabled: !r.go });
-    if (!r.go) launch.bg.on('pointerover', () => Tooltip.show(this, 'Fix every red (blocking) item first. Click a row for the fix.', { x: 300, y: 200 }));
+    if (!r.go) launch.bg.on('pointerover', () => Tooltip.show(this, 'Fix every red (blocking) item first. Click a row for the fix.', launch));
     const first = r.checks.find((c) => c.status === 'fail') ?? r.checks.find((c) => c.status === 'warn') ?? r.checks[0];
     this.showDetail(first, r.checks.indexOf(first));
     this.input.keyboard?.on('keydown-ENTER', () => { if (r.go) this.poll(); });
@@ -88,7 +88,7 @@ export class ReviewScene extends Phaser.Scene {
     while (y + body.height > 236 && body.text.length > 12) body.setText(body.text.replace(/\s*\S+…?$/, '…'));
     D.add(body);
     const hit = this.add.rectangle(310, 120, 164, 116, 0, 0).setOrigin(0, 0).setInteractive();
-    hit.on('pointerover', () => Tooltip.show(this, full, { x: 20, y: 60 }));
+    hit.on('pointerover', () => Tooltip.show(this, full, { x: 20, y: 30, abs: true }));
     hit.on('pointerout', () => Tooltip.hide());
     D.add(hit);
   }

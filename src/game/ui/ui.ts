@@ -120,29 +120,57 @@ export class Meter extends Phaser.GameObjects.Container {
 }
 
 // ----------------------------------------------------------------- Tooltip
+/** The hovered thing's bounds; with abs: true, x / y are the tooltip's own top-left instead. */
+type Anchor = { x: number; y: number; width?: number; height?: number; parentContainer?: Phaser.GameObjects.Container | null; abs?: boolean };
+const tooltipScenes = new WeakSet<Phaser.Scene>();
+/**
+ * Hover help. Appears after 400 ms of hovering, disappears on mouse-out, click or any key, and is
+ * placed beside the hovered thing (above it in the lower half of the screen, below it in the upper
+ * half), never on top of it.
+ */
 export const Tooltip = {
   obj: null as Phaser.GameObjects.Container | null,
-  show(scene: Phaser.Scene, text: string, anchor?: { x: number; y: number; width?: number; height?: number; parentContainer?: Phaser.GameObjects.Container | null }) {
+  timer: null as Phaser.Time.TimerEvent | null,
+  DELAY: 400,
+  show(scene: Phaser.Scene, text: string, anchor?: Anchor) {
     this.hide(scene);
+    if (!tooltipScenes.has(scene)) {
+      tooltipScenes.add(scene);
+      scene.input.keyboard?.on('keydown', () => Tooltip.hide());
+      scene.input.on('pointerdown', () => Tooltip.hide());
+      scene.events.once('shutdown', () => { tooltipScenes.delete(scene); Tooltip.hide(); });
+    }
+    const at = anchor ?? { x: scene.input.activePointer.x, y: scene.input.activePointer.y, width: 1, height: 1 };
+    this.timer = scene.time.delayedCall(this.DELAY, () => { this.timer = null; this.draw(scene, text, at); });
+  },
+  draw(scene: Phaser.Scene, text: string, anchor: Anchor) {
     let maxW = 280;
     const t = txt(scene, 6, 5, text, { maxWidth: maxW - 12, color: C.white, size: 15 });
-    // never clip: widen a long tooltip, then use the small font
     if (t.height + 11 > H - 4) { maxW = W - 8; t.setMaxWidth(maxW - 12); }
     if (t.height + 11 > H - 4) t.setFontSize(10).setMaxWidth(maxW - 12);
     const h = Math.max(18, t.height + 11);
+    maxW = Math.min(maxW, Math.ceil(t.width) + 14); // hug the text
     const c = scene.add.container(0, 0);
     c.add(panel(scene, 0, 0, maxW, h, 'tooltip'));
     c.add(t);
-    let ax = anchor?.x ?? scene.input.activePointer.x, ay = anchor?.y ?? scene.input.activePointer.y;
-    if (anchor?.parentContainer) { ax += anchor.parentContainer.x; ay += anchor.parentContainer.y; }
-    let x = ax, y = ay + (anchor?.height ?? 0) + 2;
-    if (x + maxW > W - 2) x = W - maxW - 2;
-    if (y + h > H - 2) y = ay - h - 2;
-    c.setPosition(Math.round(Math.max(2, x)), Math.round(Math.max(2, Math.min(y, H - h - 2)))).setDepth(1000);
+    let ax = anchor.x, ay = anchor.y;
+    if (anchor.parentContainer) { ax += anchor.parentContainer.x; ay += anchor.parentContainer.y; }
+    if (anchor.abs) { c.setPosition(Math.round(Math.max(2, Math.min(ax, W - maxW - 2))), Math.round(Math.max(2, Math.min(ay, H - h - 2)))).setDepth(1000); pinToScreen(c); this.obj = c; return; }
+    const aw = anchor.width ?? 1, ah = anchor.height ?? 1;
+    // beside the anchor, never over it: above it in the lower half, below it in the upper half
+    let y = ay + ah / 2 > H / 2 ? ay - h - 3 : ay + ah + 3;
+    if (y < 2) y = ay + ah + 3;
+    if (y + h > H - 2) y = Math.max(2, ay - h - 3);
+    let x = ax + aw / 2 - maxW / 2;
+    x = Math.max(2, Math.min(x, W - maxW - 2));
+    c.setPosition(Math.round(x), Math.round(Math.max(2, Math.min(y, H - h - 2)))).setDepth(1000);
     pinToScreen(c);
     this.obj = c;
   },
-  hide(_scene?: Phaser.Scene) { if (this.obj) { this.obj.destroy(); this.obj = null; } },
+  hide(_scene?: Phaser.Scene) {
+    if (this.timer) { this.timer.remove(false); this.timer = null; }
+    if (this.obj) { this.obj.destroy(); this.obj = null; }
+  },
 };
 
 // ----------------------------------------------------------------- Dialogue

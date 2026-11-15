@@ -84,7 +84,7 @@ export class OpsScene extends Phaser.Scene {
       const m = new Meter(this, x, y, 110, label, ic);
       this.meters[k] = m;
       const hit = this.add.rectangle(x, y, 110, 20, 0, 0).setOrigin(0, 0).setInteractive();
-      hit.on('pointerover', () => Tooltip.show(this, tip, { x, y: y - 46 }));
+      hit.on('pointerover', () => Tooltip.show(this, tip, { x, y, width: 110, height: 20 }));
       hit.on('pointerout', () => Tooltip.hide());
     };
     mk('fuel', 6, 175, 'FUEL', 'fuel', 'Service-module propellant. The marker shows what the remaining burns need. Below the marker = cannot get home!');
