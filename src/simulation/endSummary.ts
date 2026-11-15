@@ -6,7 +6,6 @@
 import type { MissionState } from './types';
 import type { MissionReport } from './scoring';
 import { specOf } from './specModel';
-import { MISSION_DV } from '../data/specParts';
 import { fmt, fmtUsdM } from './units';
 
 export type Likeness = 'Apollo' | 'Artemis' | 'a hybrid';
@@ -33,7 +32,7 @@ export function margins(s: MissionState) {
   const st = s.stats, S = st.spec;
   const out: { what: string; have: number; need: number; unit: string }[] = [];
   if (S) {
-    out.push({ what: 'rocket speed', have: S.rocket.dvTotal, need: MISSION_DV.toMoon, unit: 'm/s' });
+    out.push({ what: 'rocket speed', have: S.rocket.dvTotal, need: S.rocket.target, unit: 'm/s' });
     out.push({ what: 'capsule speed for the trip home', have: S.capsuleReturn.dvLeft, need: S.capsuleReturn.need, unit: 'm/s' });
     out.push({ what: 'capsule days', have: S.capsule.maxDays, need: st.missionDays, unit: 'days' });
   }

@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
+import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, icon, iconFrame, kg, Meter, modal, modalState, onceKey, panel, toast, Tooltip, txt, W } from '../ui/ui';
+import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, icon, iconFrame, kg, Meter, modal, modalState, onceKey, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
 import { SpacecraftView } from '../components/SpacecraftView';
 import { COMPONENT_BY_ID, Component, componentsInSlot, SLOTS, SlotId } from '../../data/components';
 import { cloneDesign, Design, LAUNCH_VEHICLES, REFERENCE_DESIGN, SITES, TEMPOS, LV_BY_ID, SITE_BY_ID } from '../../data/mission';
@@ -12,8 +13,11 @@ import { CAPSULE_OWNED_SLOTS, missionDv, specOf } from '../../simulation/specMod
 import { CAPSULES, ORBITS, OrbitId, SpecDesign } from '../../data/specParts';
 import { ARCH_RUNDOWN, CAPSULE_RUNDOWN, ORBIT_RUNDOWN, STYLE_RUNDOWN } from '../../data/missionStyle';
 import { fmt, fmtUsd, fmtUsdM, kgToLb } from '../../simulation/units';
+import { renderRocketTab } from './hangarRocket';
+import { applyDesignPick, dueDesignCard } from '../../simulation/roleDecisions';
+import { showRoleCard } from '../ui/roleCard';
 
-type Cat = SlotId | 'plan' | 'style';
+type Cat = SlotId | 'plan' | 'style' | 'rocket';
 const FLOOR_Y = 209;
 
 export class HangarScene extends Phaser.Scene {
@@ -56,14 +60,14 @@ export class HangarScene extends Phaser.Scene {
     // left: categories
     panel(this, 2, 2, 104, 210, 'panel');
     txt(this, 54, 7, 'SYSTEMS', { align: 'center', color: C.gold });
-    const cats: { id: Cat; label: string; icon: string }[] = [{ id: 'plan', label: 'Mission Plan', icon: 'rocket' }, ...(SPEC_MODEL ? [{ id: 'style' as Cat, label: 'Mission Style', icon: 'earth' }] : []), ...SLOTS.filter((s) => !(SPEC_MODEL && CAPSULE_OWNED_SLOTS.includes(s.id))).map((s) => ({ id: s.id as Cat, label: s.label, icon: s.icon }))];
+    const cats: { id: Cat; label: string; icon: string }[] = [{ id: 'plan', label: 'Mission Plan', icon: 'rocket' }, ...(SPEC_MODEL ? [{ id: 'rocket' as Cat, label: 'Rocket', icon: 'engine' }, { id: 'style' as Cat, label: 'Mission Style', icon: 'earth' }] : []), ...SLOTS.filter((s) => !(SPEC_MODEL && CAPSULE_OWNED_SLOTS.includes(s.id))).map((s) => ({ id: s.id as Cat, label: s.label, icon: s.icon }))];
     cats.forEach((c, i) => {
       const y = 19 + i * 13.6;
       const bg = this.add.rectangle(6, y, 96, 13, 0x2a4c98, 0).setOrigin(0, 0).setInteractive({ useHandCursor: true });
       icon(this, 8, y + 0.5, c.icon);
       const label = txt(this, 22, y + 2, c.label, { color: C.text });
       const status = this.add.image(90, y + 0.5, 'icons', iconFrame('ok')).setOrigin(0, 0);
-      bg.on('pointerover', () => { bg.setFillStyle(0x2a4c98, 0.5); audio.sfx('move'); const s = SLOTS.find((x) => x.id === c.id); Tooltip.show(this, c.id === 'style' ? 'Capsule, lunar orbit and architecture: Apollo-style or Artemis-style.' : s ? s.help : 'Rocket, landing site, crew size, surface stay and operations tempo.', { x: 108, y }); });
+      bg.on('pointerover', () => { bg.setFillStyle(0x2a4c98, 0.5); audio.sfx('move'); const s = SLOTS.find((x) => x.id === c.id); Tooltip.show(this, c.id === 'rocket' ? 'Engines, fuel, tank material and boosters for each stage.' : c.id === 'style' ? 'Capsule, lunar orbit and architecture: Apollo-style or Artemis-style.' : s ? s.help : 'Rocket, landing site, crew size, surface stay and operations tempo.', { x: 112, y, abs: true }); }); // right of the list
       bg.on('pointerout', () => { Tooltip.hide(); this.refresh(); });
       bg.on('pointerup', () => { audio.sfx('select'); this.selectCat(c.id); });
       this.catRows.push({ cat: c.id, bg, status, label });
@@ -90,7 +94,7 @@ export class HangarScene extends Phaser.Scene {
         lander: 'Lander Δv margin for descent and ascent with maximum samples.',
       };
       const hit = this.add.rectangle(m.x, m.y, 96, 20, 0, 0).setOrigin(0, 0).setInteractive();
-      hit.on('pointerover', () => Tooltip.show(this, tips[k], { x: m.x, y: m.y - 50 }));
+      hit.on('pointerover', () => Tooltip.show(this, tips[k], { x: m.x, y: m.y, width: 96, height: 20 }));
       hit.on('pointerout', () => Tooltip.hide());
     }
     this.summary = txt(this, 322, 220, '', { color: C.dim, maxWidth: 70 });
@@ -139,6 +143,7 @@ export class HangarScene extends Phaser.Scene {
     this.undo.push(JSON.stringify(this.design));
     if (this.undo.length > 50) this.undo.shift();
     mut(this.design);
+    learned(this, 'tradeoff', 400); // D1: every change moves cost, weight, risk and science together
     store.design = cloneDesign(this.design);
     store.saveDesign();
     this.view.build(this.design);
@@ -210,6 +215,7 @@ export class HangarScene extends Phaser.Scene {
     for (const r of this.catRows) {
       let st: string = 'ok';
       if (r.cat === 'plan') st = planBad ? 'fail' : 'ok';
+      else if (r.cat === 'rocket') st = this.review.checks.some((c) => c.id === 'launch_mass' && c.status === 'fail') ? 'fail' : this.review.checks.some((c) => c.id === 'upper_push' && c.status !== 'pass') ? 'warn' : 'ok';
       else if (r.cat === 'style') st = this.review.checks.some((c) => ['propulsion', 'capsule', 'shield', 'lander_dv'].includes(c.id) && c.status === 'fail') ? 'fail' : 'ok';
       else {
         const slot = SLOTS.find((x) => x.id === r.cat)!;
@@ -235,7 +241,11 @@ export class HangarScene extends Phaser.Scene {
     const v = list[(list.indexOf(cur) + d + list.length) % list.length];
     this.change(() => { this.design.spec = { ...specOf(this.design), [keys[this.styleRow]]: v } as SpecDesign; });
   }
+  rocketSection: 'stage1' | 'stage2' | 'boosters' = 'stage1';
+  listPage = 0; // option list page (A3: rows that do not fit go onto pages, never under the detail box)
   selectCat(c: Cat) {
+    if (c !== this.cat) this.listPage = 0;
+    if (c === 'style') learned(this, 'orbits'); // D1
     this.cat = c;
     Tooltip.hide();
     this.view.highlight(null);
@@ -251,11 +261,21 @@ export class HangarScene extends Phaser.Scene {
     const x0 = 326;
     if (this.cat === 'plan') { this.renderPlan(); return; }
     if (this.cat === 'style') { this.renderStyle(); return; }
+    if (this.cat === 'rocket') { renderRocketTab(this); return; }
     const slot = SLOTS.find((s) => s.id === this.cat)!;
     R.add(txt(this, 400, 7, slot.label.toUpperCase(), { align: 'center', color: C.gold }));
-    R.add(txt(this, x0 + 2, 18, slot.multi ? 'Choose any (click to toggle)' : 'Choose one', { color: C.dim }));
-    const opts = componentsInSlot(this.cat as SlotId);
-    const ch = opts.length > 4 ? 24 : 30;
+    R.add(txt(this, x0 + 2, 18, slot.multi ? 'Choose any' : 'Choose one', { color: C.dim }));
+    const all = componentsInSlot(this.cat as SlotId);
+    const ch = all.length > 4 ? 22 : 30;
+    const per = Math.floor((152 - 28) / (ch + 2)); // rows that fit above the detail box
+    const pages = Math.max(1, Math.ceil(all.length / per));
+    this.listPage = Math.min(this.listPage, pages - 1);
+    const opts = all.slice(this.listPage * per, this.listPage * per + per);
+    if (pages > 1) {
+      const pg = txt(this, x0 + 146, 18, `< ${this.listPage + 1}/${pages} >`, { align: 'right', color: C.teal });
+      pg.setInteractive({ useHandCursor: true }).on('pointerup', () => { this.listPage = (this.listPage + 1) % pages; audio.sfx('move'); this.renderRight(); });
+      R.add(pg);
+    }
     opts.forEach((comp, i) => {
       const y = 28 + i * (ch + 2);
       const selected = slot.multi ? (this.cat === 'science' ? this.design.science : this.design.safety).includes(comp.id) : this.design.slots[this.cat] === comp.id;
@@ -266,7 +286,7 @@ export class HangarScene extends Phaser.Scene {
       R.add(txt(this, x0 + 18, y + 4, comp.short, { color: selected ? C.gold2 : C.white }));
       R.add(txt(this, x0 + 144, y + 4, `$${comp.costM}M`, { align: 'right', color: C.dim }));
       const metric = this.metricLine(comp);
-      R.add(txt(this, x0 + 18, y + (ch > 26 ? 16 : 13), metric, { color: C.blue }));
+      R.add(txt(this, x0 + 18, y + (ch > 26 ? 16 : 12), metric, { color: C.blue }));
       card.on('pointerover', () => { audio.sfx('move'); this.showDetail(comp); this.view.highlight(selected ? comp.id : null); });
       card.on('pointerout', () => this.view.highlight(null));
       card.on('pointerup', () => this.pick(comp, slot.multi ?? false, selected));
@@ -339,13 +359,12 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
     const swap = lines.length ? txt(this, 328, y0 + 10, lines.join('\n'), { maxWidth: 144, color: C.orange }) : null;
     if (swap) D.add(swap);
     const top = y0 + 10 + (swap ? swap.height + 1 : 0);
-    const body = txt(this, 328, top, `${engine.trim() ? engine.trim() + '\n' : ''}${comp.desc}`, { maxWidth: 144, color: C.white, size: 15 });
-    D.add(body);
-    while (top + body.height > 212 && body.text.length > 12) body.setText(body.text.replace(/\s*\S+…?$/, '…'));
+    // never clip (A3): long descriptions page inside the box (click "1/2 >")
+    D.add(pagedText(this, 328, top, 144, 212 - top, `${engine.trim() ? engine.trim() + '\n' : ''}${comp.desc}`, { color: C.white, size: 15 }));
     // educational note (hover for full), on the title line
     const learnBtn = txt(this, 472, y0, '▶ WHY', { color: C.teal, align: 'right' });
     learnBtn.setInteractive({ useHandCursor: true });
-    learnBtn.on('pointerover', () => Tooltip.show(this, `${comp.desc}${engine}\n\n${comp.learn}`, { x: 300, y: 120 }));
+    learnBtn.on('pointerover', () => Tooltip.show(this, `${comp.desc}${engine}\n\n${comp.learn}`, { x: 30, y: 40, abs: true }));
     learnBtn.on('pointerout', () => Tooltip.hide());
     D.add(learnBtn);
   }
@@ -383,7 +402,7 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
       const focus = ['CAPSULE', 'LUNAR ORBIT', 'ARCHITECTURE'].indexOf(label) === this.styleRow;
       const l = txt(this, x0 + 2, y, `${focus ? '> ' : ''}${label}`, { color: focus ? C.gold2 : C.dim });
       // the detail box may trim; the tooltip always shows the full rundown and numbers
-      const show = (t: string) => { this.planDetail(t); Tooltip.show(this, t, { x: 140, y: 150 }); };
+      const show = (t: string) => { this.planDetail(t); Tooltip.show(this, t, { x: 30, y: 40, abs: true }); };
       l.setInteractive({ useHandCursor: true }); l.on('pointerover', () => show(rundown)); l.on('pointerout', () => Tooltip.hide());
       R.add(l);
       const bw = Math.floor(146 / items.length) - 2;
@@ -418,9 +437,7 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
   planDetail(text: string) {
     this.detail.removeAll(true);
     this.detail.add(this.add.rectangle(326, 155, 148, 1, C.gold, 0.6).setOrigin(0, 0));
-    const t = txt(this, 328, 158, text, { maxWidth: 144, color: C.white, size: 15 });
-    while (158 + t.height > 212 && t.text.length > 12) t.setText(t.text.replace(/\s*\S+…?$/, '…')); // never clip
-    this.detail.add(t);
+    this.detail.add(pagedText(this, 328, 158, 144, 54, text, { color: C.white, size: 15 })); // never clip: pages
   }
 
   hint() {
@@ -437,8 +454,18 @@ Engine ${fmt(comp.thrustN)} N${comp.ascentThrustN ? ` down / ${fmt(comp.ascentTh
   }
 
   goReview() {
+    if (modalState.open) return;
     store.design = cloneDesign(this.design);
     store.saveDesign();
+    // D3: the player's first role decision comes as the design heads to the desk
+    const card = SPEC_MODEL ? dueDesignCard(this.design, 'design1') : null;
+    if (card) {
+      showRoleCard(this, { title: card.title, text: card.text(this.design), tip: card.tip, options: card.options.map((o) => ({ label: o.label, good: o.good(this.design), bad: o.bad(this.design) })) }, (i) => {
+        this.change((d) => { const nd = applyDesignPick(d, card, i); Object.assign(d, nd); });
+        this.goReview();
+      });
+      return;
+    }
     fadeTo(this, SPEC_MODEL ? 'Desk' : 'Review'); // spec: the Calculation Desk sits between the hangar and launch
   }
 }

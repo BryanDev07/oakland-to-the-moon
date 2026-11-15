@@ -19,6 +19,7 @@ import { ActiveRisk, analyzeRocket, assessRisks, maxPayloadKg, StackStats, tankR
 import type { BurnPlan, DesignStats, MassLine } from './spacecraft';
 import { lbToKg } from './units';
 import { budgetMult, PriceCat, priceMult, scienceMult, slotPriceCat } from '../data/roles';
+import { ISS, isIss, missionCfg } from '../data/missionConfig';
 
 /** Slots whose job the capsule now does (engine, SM tanks, heat shield). Hidden, not deleted. */
 export const CAPSULE_OWNED_SLOTS = ['propulsion', 'tank', 'heatShield'];
@@ -47,7 +48,8 @@ export function orbitOf(d: Design): OrbitSpec {
 export function budgetForM(d: Design): number {
   if (!K.SPEC_MODEL) return K.BUDGET_M;
   const sp = specOf(d);
-  return (BUDGETS_USD[sp.difficulty].v / 1e6) * budgetMult(sp.role); // Mission Commander: +5%
+  const usd = isIss(d) ? missionCfg(d).budgetsUsd[sp.difficulty].v : BUDGETS_USD[sp.difficulty].v; // E2: ISS budgets
+  return (usd / 1e6) * budgetMult(sp.role); // Mission Commander: +5%
 }
 
 /** Speeds (m/s) for every burn after trans-lunar injection. */
@@ -96,7 +98,9 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
   const dv = missionDv(d);
   const artemis = sp.architecture === 'artemis';
   const plan = d.plan, tempo = TEMPO_BY_ID[plan.tempo];
-  const parts = base.parts.filter((p) => !CAPSULE_OWNED_SLOTS.includes(p.slot));
+  const iss = isIss(d);
+  // E2: the ISS mission flies no lander and no surface instruments
+  const parts = base.parts.filter((p) => !CAPSULE_OWNED_SLOTS.includes(p.slot) && !(iss && (p.slot === 'lander' || p.slot === 'science')));
   const lander = parts.find((p) => p.slot === 'lander');
   const pwr = parts.find((p) => p.slot === 'power');
   const isSpecLander = !!lander && !!LANDER_SPEC_BY_ID[lander.id];
@@ -106,7 +110,7 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
   const crew = plan.crew;
   const landingCrew = lander ? Math.min(crew - 1, lander.crewCapacity ?? 2) : 0;
   const orbitCrew = crew - landingCrew;
-  const missionDays = COAST_DAYS.v + orbit.waitDays.v + plan.stayDays + COAST_DAYS.v;
+  const missionDays = iss ? ISS.phasingDays.v + ISS.dockedDays.v + ISS.returnDays.v : COAST_DAYS.v + orbit.waitDays.v + plan.stayDays + COAST_DAYS.v;
   const consumableDays = missionDays + tempo.reserveDays;
   const ls = parts.find((p) => p.slot === 'lifeSupport');
   const wr = ls?.waterRecovery ?? 0, orr = ls?.o2Recovery ?? 0;
@@ -157,8 +161,9 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
 
   // ------------------------------------------------------------ rocket (spec tab 6 #1-#6)
   const build = rocketOf(d);
-  const rocket = analyzeRocket(build, tliKg, sp.fixes);
-  const rocketCapacityKg = maxPayloadKg(build, sp.fixes);
+  const target = missionCfg(d).dvTarget; // E2: 12,600 m/s to the Moon, 9,400 m/s to the ISS
+  const rocket = analyzeRocket(build, tliKg, sp.fixes, target);
+  const rocketCapacityKg = maxPayloadKg(build, sp.fixes, target);
   const risks = assessRisks(build, sp.fixes, sp.thruster, sp.thrusterTank);
 
   // ------------------------------------------------------------ cost ($M; spec tab 6 #15)
@@ -175,6 +180,8 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
     ...(packs ? [{ label: `${packs} x ${POWER_PARTS.liionPack.name} (lander)`, m: ((packs * POWER_PARTS.liionPack.priceUsd.v) / 1e6) * rm('spacecraft'), ids: [] as string[] }] : []),
     ...(solarOn ? [{ label: POWER_PARTS.landerSolar.name, m: (POWER_PARTS.landerSolar.priceUsd.v / 1e6) * rm('spacecraft'), ids: [] as string[] }] : []),
     ...sp.fixes.filter((f) => f !== 'spareSeal').map((f) => ({ label: FIXES[f].name, m: FIXES[f].costUsd.v / 1e6, ids: [] as string[] })),
+    // D3: costs of the player's design-time role decisions (budget reserve, launch delays)
+    ...(sp.roleLog ?? []).filter((e) => e.costUsd).map((e) => ({ label: `Role decision: ${e.label}`, m: e.costUsd! / 1e6, ids: [] as string[] })),
   ];
   const costM = costLines.reduce((s, l) => s + l.m, 0);
 
@@ -194,7 +201,11 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
   const marginKg = smPropKg - requiredKg;
   const leftAfterLoi = smPropKg - loiProp;
   const returnDvLeft = leftAfterLoi > 0 ? dvVe(cap.veMs.v, teiMass, teiMass - Math.min(leftAfterLoi, teiMass - 1)) : 0;
-  const capsuleReturn = { usedInKg: loiProp, leftKg: leftAfterLoi, dvLeft: returnDvLeft, need: dv.tei, pass: leftAfterLoi >= 0 && returnDvLeft >= dv.tei };
+  let capsuleReturn = { usedInKg: loiProp, leftKg: leftAfterLoi, dvLeft: returnDvLeft, need: dv.tei, pass: leftAfterLoi >= 0 && returnDvLeft >= dv.tei };
+  if (iss) { // E2: no lunar burns; the capsule only needs its de-orbit burn home
+    const dvAll = dvVe(cap.veMs.v, csmWetKg, csmWetKg - smPropKg);
+    capsuleReturn = { usedInKg: 0, leftKg: smPropKg, dvLeft: dvAll, need: ISS.deorbitDv.v, pass: dvAll >= ISS.deorbitDv.v };
+  }
 
   // ------------------------------------------------------------ lander (spec tab 6 #9)
   let landerStats = base.lander;
@@ -257,7 +268,7 @@ export function analyzeSpec(d: Design, base: DesignStats): DesignStats {
   const needMbPerDay = MISSION_BASE_MB_PER_DAY.v + parts.reduce((s, p) => s + (p.dataMBPerDay ?? 0), 0);
 
   // ------------------------------------------------------------ heat shield (spec tab 6 #14)
-  const health = shieldHealth(cap.shieldMph.v);
+  const health = shieldHealth(cap.shieldMph.v, 0, missionCfg(d).reentryMph.v);
   const entryMassKg = lbToKg(cap.cmLb.v) + crew * K.CREW_MASS_KG + samplesPlanned;
 
   const thrusterCount = thr ? sp.thrusterCount : 0;

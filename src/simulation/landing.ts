@@ -156,3 +156,18 @@ export function autopilot(s: LandingSim, t: Terrain): LanderInput {
   const throttle = (aNeed * s.massKg) / (s.thrustN * Math.cos(s.tilt));
   return { throttle: Math.max(0, Math.min(1, throttle)), tilt: tiltRad / 0.4 };
 }
+
+/** D4: autopilot time speed-up (1x / 2x / 4x). Manual flying stays at 1x. */
+export const LANDING_SPEEDS = [1, 2, 4] as const;
+export const LANDING_STEP = 1 / 30;
+/**
+ * Advance the landing by one frame of real time `frameDt` at `speed`, always in fixed 1/30 s physics
+ * steps (never a bigger step), so fuel, altitude and touchdown are the same at every speed.
+ * Returns the leftover time to carry into the next frame.
+ */
+export function advanceLanding(s: LandingSim, t: Terrain, acc: number, frameDt: number, speed: number, input: () => LanderInput): number {
+  acc += frameDt * speed;
+  let n = 0;
+  while (acc >= LANDING_STEP && !s.done && n < 64) { stepLanding(s, t, input(), LANDING_STEP); acc -= LANDING_STEP; n++; }
+  return s.done ? 0 : acc;
+}

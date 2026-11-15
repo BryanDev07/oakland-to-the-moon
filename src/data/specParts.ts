@@ -189,6 +189,7 @@ export const ORBITS: Record<OrbitId, OrbitSpec> = {
 export const SUN_NEAR_EARTH = G(0.61);
 export const COAST_DAYS = G(3, 'each way');
 export const MIN_LIFTOFF_TWR = G(1.2);
+export const MIN_UPPER_TWR = G(0.3, 'stage 2 push / its starting weight; below it the stage wastes fuel fighting gravity');
 export const SHIELD_REQUIRED_MPH = R(24_400, 'Orion on Artemis I; up to 5,000 F');
 export const MOON_G_RATIO = R(0.165);
 export const LB_TO_N = 4.448; // 1 lb of weight = 4.448 N (desk conversion)
@@ -229,6 +230,10 @@ export interface SpecDesign {
   fixes: FixId[];
   difficulty: Difficulty;
   role: RoleId | null;
+  /** E1: which mission (optional; older saves are the Moon landing). */
+  mission?: 'moon' | 'iss';
+  /** D3: the player's role decisions made during design (optional; older saves have none). */
+  roleLog?: { id: string; pick: number; label: string; good: string; bad: string; costUsd?: number; flags?: string[] }[];
 }
 
 /** The PART C acceptance-test rocket (SLS-like, carrying Orion). */

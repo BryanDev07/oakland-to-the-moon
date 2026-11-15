@@ -15,7 +15,7 @@ import type { MissionState, PendingEvent, Phase } from './types';
 import { deltaV, propellantForDv } from './rocket';
 import { missionDv, specOf } from './specModel';
 import { fmt, kgToLb, lbToKg } from './units';
-import { INSTRUMENTS } from '../data/specParts';
+import { INSTRUMENTS, LIFE_SUPPORT_LB } from '../data/specParts';
 import {
   abortMission, applyLanding, isp, landerMass, lifeboatReturn, log, loseCrew, propMarginKg, totalMass, turnBack,
 } from './mission';
@@ -86,10 +86,14 @@ export function batteryMargin(s: MissionState): number {
 }
 const landerBatteryFrac = (s: MissionState) => (s.stats.lander.batteryWh ? s.landerBatteryWh / s.stats.lander.batteryWh : 1);
 const daysLeft = (s: MissionState) => Math.max(1, s.stats.missionDays - s.t / K.DAY);
+/** Card 11 (A8): the leak loses this much oxygen a day (G; matches option C's cost on Hard). */
+export const LEAK_O2_LB_PER_DAY = 8;
+/** Days the oxygen on board lasts for the crew at 2.0 lb each per day, plus the leak when counted. */
+export const oxygenDays = (s: MissionState, leak = true) => kgToLb(s.o2Kg) / (s.stats.crew * LIFE_SUPPORT_LB.oxygen.v + (leak ? LEAK_O2_LB_PER_DAY : 0));
 const o2Need = (s: MissionState) => s.crewOnCsm * daysLeft(s) * K.O2_KG_PER_CREW_DAY * (1 - s.o2Recovery);
 const o2Margin = (s: MissionState) => s.o2Kg / Math.max(1e-6, o2Need(s)) - 1;
 /** Crew time costs supplies: 15 lb per crew-day. */
-function spendDays(s: MissionState, days: number) {
+export function spendDays(s: MissionState, days: number) {
   if (days <= 0) return;
   const n = Math.max(1, s.crewOnCsm);
   s.o2Kg -= n * days * K.O2_KG_PER_CREW_DAY;
@@ -272,13 +276,13 @@ export const DECK: Card[] = [
     id: 'card11', n: 11, title: 'SMALL CABIN LEAK', stages: ['coast', 'lunarOrbit'],
     real: 'In 2018 the ISS crew sealed a 2 mm hole in a Soyuz with tape, epoxy and gauze.',
     eligible: () => true, weakSpot: (s) => (rank(s) >= 2 ? 2 : 1),
-    text: (s) => `Cabin pressure is dropping slowly. Oxygen: ${lb(s.o2Kg)} lb for about ${fmt(daysLeft(s), 1)} more days.`,
+    text: (s) => `Cabin pressure is dropping slowly. Oxygen: ${lb(s.o2Kg)} lb, about ${fmt(oxygenDays(s), 1)} days for ${s.stats.crew} crew including the leak (${fmt(daysLeft(s), 1)} days still to fly).`,
     hint: 'Finding and patching the leak is cheap if you start now.',
     fd: () => 0, why: () => 'Patching it for good costs a few hours and 10 lb of oxygen: the sound call.',
     options: [
       { label: 'Find it and patch it', good: () => 'Leak stopped for good.', bad: (_s, c) => `-${fmt(6 * c.k)} hours, -${fmt(10 * c.k)} lb of oxygen while searching.`, apply: (s, c) => { spendDays(s, (6 * c.k) / 24); s.o2Kg -= lbToKg(10 * c.k); return 'Found it: a pinhole by a fitting. Patched.'; } },
       { label: 'Seal off the leaking module', good: () => 'Instant fix.', bad: (_s, c) => `-${fmt(25 * c.k)}% of stored supplies, locked behind the hatch.`, apply: (s, c) => { const f = 1 - 0.25 * c.k; s.o2Kg *= f; s.waterKg *= f; s.foodKg *= f; return 'Module sealed off with its supplies inside.'; } },
-      { label: 'Ignore it and run on reserves', good: () => 'No time lost.', bad: (s, c) => `-${fmt(8 * c.k)} lb of oxygen per day (${lb(lbToKg(8 * c.k) * daysLeft(s))} lb by splashdown); you have ${lb(s.o2Kg)} lb.`, apply: (s, c) => { s.o2Kg -= lbToKg(8 * c.k) * daysLeft(s); if (c.easy && s.o2Kg < o2Need(s)) s.o2Kg = o2Need(s) * 1.05; return 'Running on reserves.'; } },
+      { label: 'Ignore it and run on reserves', good: () => 'No time lost.', bad: (s, c) => `-${fmt(LEAK_O2_LB_PER_DAY * c.k)} lb of oxygen per day (${lb(lbToKg(LEAK_O2_LB_PER_DAY * c.k) * daysLeft(s))} lb by splashdown); you have ${lb(s.o2Kg)} lb.`, apply: (s, c) => { s.o2Kg -= lbToKg(LEAK_O2_LB_PER_DAY * c.k) * daysLeft(s); if (c.easy && s.o2Kg < o2Need(s)) s.o2Kg = o2Need(s) * 1.05; return 'Running on reserves.'; } },
     ],
   },
   {

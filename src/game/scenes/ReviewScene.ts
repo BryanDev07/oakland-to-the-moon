@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
+import { learned } from '../ui/learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, iconFrame, kg, panel, toast, Tooltip, txt, W } from '../ui/ui';
+import { Button, C, chapterCard, crt, fadeIn, fadeTo, gearButton, iconFrame, kg, pagedText, panel, toast, Tooltip, txt, W } from '../ui/ui';
 import { reviewDesign, ReviewCheck, ReviewResult } from '../../simulation/review';
 import { COMPONENT_BY_ID } from '../../data/components';
 import { LV_BY_ID, SITE_BY_ID, TEMPO_BY_ID } from '../../data/mission';
@@ -9,6 +10,7 @@ import { SPEC_MODEL } from '../../simulation/constants';
 import { fmtLb, fmtUsdM } from '../../simulation/units';
 import { createMission } from '../../simulation/mission';
 import { forcedSeed } from '../../state/debug';
+import { specOf } from '../../simulation/specModel';
 
 export class ReviewScene extends Phaser.Scene {
   r!: ReviewResult;
@@ -63,14 +65,16 @@ export class ReviewScene extends Phaser.Scene {
     this.detail = this.add.container(0, 0);
     new Button(this, 308, 244, '◀ HANGAR', () => fadeTo(this, 'Hangar'), { w: 70, h: 22 });
     const launch = new Button(this, 382, 244, 'LAUNCH ▶', () => this.poll(), { w: 94, h: 22, style: 'go', disabled: !r.go });
-    if (!r.go) launch.bg.on('pointerover', () => Tooltip.show(this, 'Fix every red (blocking) item first. Click a row for the fix.', { x: 300, y: 200 }));
+    const hardMode = specOf(store.design).difficulty === 'hard';
+    if (!r.go) launch.bg.on('pointerover', () => Tooltip.show(this, hardMode ? 'Every red (blocking) item must pass first.' : 'Fix every red (blocking) item first. Click a row for the fix.', launch));
     const first = r.checks.find((c) => c.status === 'fail') ?? r.checks.find((c) => c.status === 'warn') ?? r.checks[0];
     this.showDetail(first, r.checks.indexOf(first));
     this.input.keyboard?.on('keydown-ENTER', () => { if (r.go) this.poll(); });
     gearButton(this);
     crt(this);
+    learned(this, 'margins', 900); // D1: the review checks every margin
     if (!store.seen.reviewCard) { chapterCard(this, 3, 'COUNTDOWN'); store.markSeen('reviewCard'); }
-    if (!r.go) this.time.delayedCall(store.seen.reviewCard ? 300 : 2400, () => toast(this, 'Flight Director', 'We are NO-GO. Red items are blocking. Click each for the fix, then head back to the hangar.', 'portrait_director', 6000));
+    if (!r.go) this.time.delayedCall(store.seen.reviewCard ? 300 : 2400, () => toast(this, 'Flight Director', hardMode ? 'We are NO-GO. Red items are blocking: click each to see what failed.' : 'We are NO-GO. Red items are blocking. Click each for the fix, then head back to the hangar.', 'portrait_director', 6000));
   }
   showDetail(c: ReviewCheck, i: number) {
     this.rows.forEach((row, k) => row.setStrokeStyle(k === i ? 1 : 0, C.gold));
@@ -83,12 +87,13 @@ export class ReviewScene extends Phaser.Scene {
     const st = txt(this, 314, y, status, { color: c.status === 'pass' ? C.green : c.status === 'warn' ? C.orange : C.red, size: 15, maxWidth: 156 });
     D.add(st); y += st.height + 2;
     // 15 px, trimmed to the panel; hover the panel for everything
-    const full = `${c.detail}${c.fix ? `\nFIX: ${c.fix}` : ''}${c.culprits.length ? `\nInvolved: ${c.culprits.map((id) => COMPONENT_BY_ID[id]?.short ?? id).join(', ')}` : ''}`;
-    const body = txt(this, 314, y, c.fix && c.status !== 'pass' ? `FIX: ${c.fix}` : c.detail, { maxWidth: 156, color: c.fix && c.status !== 'pass' ? C.teal : C.white, size: 15 });
-    while (y + body.height > 236 && body.text.length > 12) body.setText(body.text.replace(/\s*\S+…?$/, '…'));
-    D.add(body);
-    const hit = this.add.rectangle(310, 120, 164, 116, 0, 0).setOrigin(0, 0).setInteractive();
-    hit.on('pointerover', () => Tooltip.show(this, full, { x: 20, y: 60 }));
+    // A7: Hard shows what failed with numbers only; the FIX line is Easy-only (Hard can ask the hangar's HINT)
+    const hard = specOf(store.design).difficulty === 'hard';
+    const full = `${c.detail}${c.fix && !hard ? `\nFIX: ${c.fix}` : ''}${c.culprits.length ? `\nInvolved: ${c.culprits.map((id) => COMPONENT_BY_ID[id]?.short ?? id).join(', ')}` : ''}`;
+    const fixFirst = c.fix && c.status !== 'pass' && !hard;
+    D.add(pagedText(this, 314, y, 156, 236 - y, fixFirst ? `FIX: ${c.fix}\n${c.detail}` : c.detail, { color: fixFirst ? C.teal : C.white, size: 15 })); // never clip: pages
+    const hit = this.add.rectangle(310, 120, 164, 104, 0, 0).setOrigin(0, 0).setInteractive();
+    hit.on('pointerover', () => Tooltip.show(this, full, { x: 20, y: 30, abs: true }));
     hit.on('pointerout', () => Tooltip.hide());
     D.add(hit);
   }

@@ -36,6 +36,8 @@ async function eva(p: Page, row: number, id: string) {
 }
 /** The Calculation Desk sits between the hangar and the review. */
 async function throughDesk(p: Page) {
+  // D3: the player's first role decision opens as the design heads to the desk; Enter takes option 1
+  for (let i = 0; i < 30 && !(await hooks(p)).includes('Desk'); i++) { if (await emergencyOpen(p)) await p.keyboard.press('Enter'); await p.waitForTimeout(200); }
   await waitScene(p, 'Desk');
   // S skips a sheet (the desk reveals steps one at a time); on the results board Enter launches
   for (let i = 0; i < 16; i++) { await p.keyboard.press('s'); await p.waitForTimeout(150); }
@@ -43,15 +45,17 @@ async function throughDesk(p: Page) {
 }
 /** True while an emergency window (or its mission-control result) is open. */
 const emergencyOpen = (p: Page) => p.evaluate(() => (window as unknown as { __ottm: { emergencyOpen: () => boolean } }).__ottm.emergencyOpen());
+/** Enter picks the highlighted option on a card and pages Mission Control's answer (A1 dialogue box). */
+const answerKey = async (p: Page) => p.keyboard.press((await emergencyOpen(p)) ? 'Enter' : '1');
 /** Answer any open emergency with option 1 (A), then dismiss the mission-control result. */
 async function clearEmergencies(p: Page, timeout = 15000) {
   const end = Date.now() + timeout;
-  while (await emergencyOpen(p)) { if (Date.now() > end) throw new Error('emergency window never closed'); await p.keyboard.press('1'); await p.waitForTimeout(400); }
+  while (await emergencyOpen(p)) { if (Date.now() > end) throw new Error('emergency window never closed'); await answerKey(p); await p.waitForTimeout(400); }
 }
 /** Wait for a scene, answering emergencies that open on the way. */
 async function waitSceneClearing(p: Page, key: string, timeout = 30000) {
   const end = Date.now() + timeout;
-  while (!(await hooks(p)).includes(key)) { if (Date.now() > end) throw new Error(`timeout waiting for scene ${key}`); if (await emergencyOpen(p)) await p.keyboard.press('1'); await p.waitForTimeout(250); }
+  while (!(await hooks(p)).includes(key)) { if (Date.now() > end) throw new Error(`timeout waiting for scene ${key}`); if (await emergencyOpen(p)) await answerKey(p); await p.waitForTimeout(250); }
   await p.waitForTimeout(500);
 }
 /**
@@ -63,7 +67,7 @@ async function clickUntilPhase(p: Page, gx: number, gy: number, want: string, ti
   while (Date.now() < end) {
     if ((await phase(p)) === want) return;
     const pending = await p.evaluate(() => !!(window as unknown as { __ottm: Hooks }).__ottm.store.mission?.pending);
-    if (pending || (await emergencyOpen(p))) await p.keyboard.press('1'); else await click(p, gx, gy);
+    if (pending || (await emergencyOpen(p))) await answerKey(p); else await click(p, gx, gy);
     await p.waitForTimeout(1200);
   }
   throw new Error(`timeout waiting for phase ${want}`);
@@ -74,7 +78,7 @@ async function until(p: Page, cond: () => Promise<boolean>, timeout = 60000) {
   while (Date.now() < end) {
     if (await cond()) return;
     const pending = await p.evaluate(() => !!(window as unknown as { __ottm: Hooks }).__ottm.store.mission?.pending);
-    if (pending || (await emergencyOpen(p))) { await p.keyboard.press('1'); }
+    if (pending || (await emergencyOpen(p))) { await answerKey(p); }
     await p.waitForTimeout(250);
   }
   throw new Error('timeout waiting for condition');
@@ -97,6 +101,16 @@ test.describe('Oakland to the Moon', () => {
     console.log(`load-to-title ${loadMs} ms, fps ${fps.toFixed(1)}`);
     expect(fps).toBeGreaterThan(20);
     await page.screenshot({ path: `${SHOTS}/01-title.png` });
+    // A5: resizing the window re-fits the canvas without a reload (16:9, inside the window)
+    for (const [w, h] of [[1024, 768], [1920, 1080], [1366, 600]]) {
+      await page.setViewportSize({ width: w, height: h });
+      await page.waitForTimeout(400);
+      const r = (await page.locator('canvas').boundingBox())!;
+      expect(r.width).toBeLessThanOrEqual(w + 1); expect(r.height).toBeLessThanOrEqual(h + 1);
+      expect(Math.min(w - r.width, h - r.height)).toBeLessThanOrEqual(2); // fills one dimension
+      expect(Math.abs(r.width / r.height - 16 / 9)).toBeLessThan(0.02);
+    }
+    await page.setViewportSize({ width: 1366, height: 768 });
     expect(errors).toEqual([]);
   });
 
@@ -123,6 +137,9 @@ test.describe('Oakland to the Moon', () => {
     await click(page, 27, 13);
     // Oakland: pick difficulty and specialty (defaults: Mission Commander, Easy)
     await waitScene(page, 'RoleSelect');
+    await page.keyboard.press('Enter');
+    // E1: then the mission (Moon Landing is the default)
+    await waitScene(page, 'MissionSelect');
     await page.keyboard.press('Enter');
     // Chapter 2: the build
     await waitScene(page, 'Hangar');
@@ -258,5 +275,32 @@ test.describe('Oakland to the Moon', () => {
     await page.screenshot({ path: `${SHOTS}/17-settings-overlay.png` });
     await page.keyboard.press('Escape');
     expect(errors).toEqual([]);
+  });
+
+  test('no text runs past the screen or is cut off (hangar, desk, coast, landing)', async ({ page }) => {
+    type O = { __ottm: { textOverflow(): string[]; goto(k: string, d?: object): void; debug: { useReferenceDesign(): void; newMission(n: number): void; advanceTo(p: string): void }; store: { markSeen(k: string): void }; game: { scene: { getScene(k: string): { catRows?: { cat: string }[]; selectCat?(c: string): void } } } } };
+    const over = () => page.evaluate(() => (window as unknown as O).__ottm.textOverflow());
+    const found: string[] = [];
+    const check = async () => { for (const b of await over()) if (!found.includes(b)) found.push(b); };
+    await page.goto('/');
+    await waitScene(page, 'Title');
+    await page.evaluate(() => { const o = (window as unknown as O).__ottm; o.debug.useReferenceDesign(); for (let i = 1; i < 9; i++) o.store.markSeen('chap' + i); o.goto('Hangar'); });
+    await waitScene(page, 'Hangar');
+    const cats = await page.evaluate(() => (window as unknown as O).__ottm.game.scene.getScene('Hangar').catRows!.map((r) => r.cat));
+    for (const c of cats) { await page.evaluate((c) => (window as unknown as O).__ottm.game.scene.getScene('Hangar').selectCat!(c), c); await page.waitForTimeout(120); await check(); }
+    await page.evaluate(() => (window as unknown as O).__ottm.goto('Desk'));
+    await waitScene(page, 'Desk');
+    for (let sheet = 0; sheet < 15; sheet++) {
+      for (let k = 0; k < 6; k++) { await page.keyboard.press('Enter'); await page.waitForTimeout(40); await check(); }
+      await page.keyboard.press('s'); await page.waitForTimeout(80);
+    }
+    for (let k = 0; k < 6; k++) { await check(); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(80); }
+    await page.evaluate(() => { const o = (window as unknown as O).__ottm; o.debug.newMission(221); o.goto('Ops'); });
+    await waitScene(page, 'Ops');
+    for (let i = 0; i < 6; i++) { await check(); await page.waitForTimeout(400); }
+    await page.evaluate(() => { const o = (window as unknown as O).__ottm; o.debug.newMission(221); o.debug.advanceTo('DESCENT'); o.goto('Landing'); });
+    await waitScene(page, 'Landing');
+    for (let i = 0; i < 4; i++) { await check(); await page.waitForTimeout(500); }
+    expect(found).toEqual([]);
   });
 });

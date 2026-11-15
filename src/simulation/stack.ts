@@ -51,11 +51,13 @@ export interface StackStats {
   pieces: { name: string; fullKg: number; emptyKg: number; ve: number; dv: number }[];
   vBoosters: number; vStage1: number; vStage2: number; dvTotal: number; target: number; spare: number; reachesMoon: boolean;
   deadWeightIgnition: number; deadWeightBurnout: number; vStage2IfKept: number;
+  /** A8: stage 2 push / stage 2 starting weight (payload + full stage 2), in N / N. */
+  upperTwr: number;
   costUsd: number; costLines: { label: string; usd: number }[];
   pass: boolean;
 }
 
-export function analyzeRocket(b: RocketBuild, payloadKg: number, fixes: FixId[] = []): StackStats {
+export function analyzeRocket(b: RocketBuild, payloadKg: number, fixes: FixId[] = [], target: number = MISSION_DV.toMoon): StackStats {
   const s1 = stageStats(b.stage1, fixes), s2 = stageStats(b.stage2, fixes);
   const bs = b.booster && b.boosterCount > 0 ? BOOSTER_BY_ID[b.booster] : null;
   const boosters = bs ? {
@@ -88,26 +90,27 @@ export function analyzeRocket(b: RocketBuild, payloadKg: number, fixes: FixId[] 
     ...(boosters ? [{ label: `${boosters.count} x ${bs!.name}`, usd: boosters.costUsd }] : []),
   ];
   const costUsd = costLines.reduce((a, l) => a + l.usd, 0);
-  const reaches = dvTotal >= MISSION_DV.toMoon;
+  const reaches = dvTotal >= target; // E2: 12,600 m/s to the Moon, 9,400 m/s to the ISS
   const lifts = ratio >= MIN_LIFTOFF_TWR.v;
   return {
     payloadKg, stage1: s1, stage2: s2, boosters, liftoffKg, liftoffN, pushN, twr: ratio, liftsOff: lifts, pieces,
-    vBoosters, vStage1, vStage2, dvTotal, target: MISSION_DV.toMoon, spare: dvTotal - MISSION_DV.toMoon, reachesMoon: reaches,
+    vBoosters, vStage1, vStage2, dvTotal, target, spare: dvTotal - target, reachesMoon: reaches,
     deadWeightIgnition: deadWeightShare(s1.emptyKg, s1Full),
     deadWeightBurnout: deadWeightShare(s1.emptyKg, s1Empty),
     // What if stage 1's empty shell stayed attached during the stage-2 burn?
     vStage2IfKept: deltaV(s2.ve, s2Full + s1.emptyKg, s2Empty + s1.emptyKg),
+    upperTwr: twr(s2.thrustN, weightN(s2Full)),
     costUsd, costLines, pass: reaches && lifts,
   };
 }
 
 /** Heaviest payload (kg) this rocket can push to 12,600 m/s while keeping TWR ≥ 1.2. */
-export function maxPayloadKg(b: RocketBuild, fixes: FixId[] = []): number {
-  if (!analyzeRocket(b, 0, fixes).pass) return 0;
+export function maxPayloadKg(b: RocketBuild, fixes: FixId[] = [], target: number = MISSION_DV.toMoon): number {
+  if (!analyzeRocket(b, 0, fixes, target).pass) return 0;
   let lo = 0, hi = 2_000_000;
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
-    if (analyzeRocket(b, mid, fixes).pass) lo = mid; else hi = mid;
+    if (analyzeRocket(b, mid, fixes, target).pass) lo = mid; else hi = mid;
   }
   return lo;
 }

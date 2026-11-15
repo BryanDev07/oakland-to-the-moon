@@ -6,9 +6,10 @@ import { evaluate, MissionReport, SCIENCE_FULL_POINTS } from '../../simulation/s
 import { createMission } from '../../simulation/mission';
 import { LV_BY_ID, SITE_BY_ID } from '../../data/mission';
 import { endSummary } from '../../simulation/endSummary';
+import { goalExamples, LEARNING_GOALS, learnedKey } from '../../data/learningGoals';
 
 /** Tab buttons → pages of show(): STORY is page 6 (shown first). */
-const TAB_PAGES = [6, 0, 1, 2, 3, 4];
+const TAB_PAGES = [6, 7, 0, 1, 2, 4]; // STORY, LEARNED (goals, then the old lessons), SCIENCE, SUPPLY, CALLS, HISTORY
 
 export class ReportScene extends Phaser.Scene {
   rep!: MissionReport;
@@ -58,7 +59,7 @@ export class ReportScene extends Phaser.Scene {
     if (prev) { const d = rep.overall - prev.score; this.prevNote = `Previous run: ${prev.score} (${prev.grade}), ${d >= 0 ? 'up' : 'down'} ${Math.abs(d)}.`; }
     // right: tabbed details
     panel(this, 180, 4, 296, 236, 'panel');
-    const tabNames = ['STORY', 'SCIENCE', 'SUPPLY', 'CALLS', 'LESSONS', 'HISTORY'];
+    const tabNames = ['STORY', 'LEARNED', 'SCIENCE', 'SUPPLY', 'CALLS', 'HISTORY'];
     let tx = 184;
     tabNames.forEach((n, i) => { const w = n.length * 6 + 4; const b = new Button(this, tx, 9, n, () => this.show(TAB_PAGES[i]), { w, h: 15 }); tx += w + 2; this.tabs.push(b); }); // ends before the fullscreen + gear buttons
     this.page = this.add.container(0, 0);
@@ -94,7 +95,20 @@ export class ReportScene extends Phaser.Scene {
       if (pages - 1 !== pageNo) { t.destroy(); y += h + 3; return t; } // on another page
       t.setY(y); P.add(t); y += h + 3; n++; return t;
     };
-    if (i === 6) {
+    if (i === 7) {
+      // D1: the eight learning goals, checked when experienced, each with the player's own example
+      const ex = goalExamples(store.mission!, r);
+      line('WHAT YOU LEARNED', C.gold2);
+      for (const g of LEARNING_GOALS) {
+        const got = !!store.seen[learnedKey(g.id)];
+        line(`${got ? '✓' : '·'} ${g.n}. ${g.title}`, got ? C.green : C.text);
+        line(ex[g.id], C.white, 10);
+      }
+      y += 4; line('RECOMMENDED IMPROVEMENTS', C.gold2);
+      for (const rec of r.recommendations) line(`• ${rec}`, C.white);
+      y += 4; line('ENGINEERING LESSONS', C.gold2);
+      for (const l of r.lessons) line(`• ${l}`, C.teal);
+    } else if (i === 6) {
       const es = endSummary(store.mission!, r);
       line(`YOUR MISSION IS MOST LIKE ${es.like.toUpperCase()}`, C.gold2);
       line(es.likeWhy, C.white);

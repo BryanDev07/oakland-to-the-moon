@@ -7,13 +7,15 @@
  * option. Keys: Up/Down to move, Enter to choose, 1-4 to choose directly.
  */
 import Phaser from 'phaser';
+import { learned } from './learned';
 import { audio } from '../audio/audio';
 import { store } from '../../state/store';
-import { Button, C, modal, onceKey, panel, pinToScreen, txt, W, H } from './ui';
+import { Button, C, Dialogue, onceKey, panel, pinToScreen, txt, W, H } from './ui';
 import * as Sim from '../../simulation/mission';
 import type { MissionState } from '../../simulation/types';
 import { specOf } from '../../simulation/specModel';
 import { roleOf } from '../../data/roles';
+import { realEventLine } from '../../data/cardSources';
 
 /** True while an emergency (or its mission-control result) is on screen. */
 export const emergencyUI = { open: false };
@@ -42,6 +44,8 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
   c.add(txt(scene, W / 2, y, ev.title, { align: 'center', color: C.gold2, size: BODY, maxWidth: w })); y += 18;
   // spec tab 8: cards 3, 6, 9, 10, 14, 15 are scenarios; card 13 is a real effect (contact lost behind the Moon)
   if (ev.stage) line(`${ev.stage}  ·  ${ev.real ? 'This really happened' : ev.scenario ? 'Scenario (made up, realistic)' : 'Real effect'}`, COL.tag);
+  const realLine = ev.real ? realEventLine(ev.id) : null; // A6: the real event in one line, with its source
+  if (realLine) line(realLine, COL.tag);
   const body = line(ev.text, COL.text, 3);
   if (ev.hint) line(`Hint: ${ev.hint}`, COL.hint, 3);
   // options, then the highlighted option's Good / Bad lines
@@ -87,8 +91,14 @@ export function showEmergency(scene: Phaser.Scene, s: MissionState, onDone: () =
     c.destroy();
     if (canFix && !armed && i === ev!.options.length) { showEmergency(scene, s, onDone, true); return; }
     const msg = Sim.resolveEvent(s, i, armed);
+    learned(scene, 'pressure', 300); // D1
     store.saveMission();
     if (ev!.fdPick === undefined) { done(); return; } // legacy event: the caller shows its own toast
-    modal(scene, { title: 'MISSION CONTROL', text: `${msg}${ev!.real ? `\nThis really happened: ${ev!.real}` : ''}`, options: [{ label: 'Continue' }], width: 440, onChoose: () => done() });
+    // Mission Control's answer in a paged dialogue box at the edge away from the action (A1)
+    const top = ['Launch', 'Landing', 'Surface'].includes(scene.scene.key);
+    const dlg = new Dialogue(scene, top ? 'top' : 'bottom');
+    pinToScreen(dlg);
+    dlg.setDepth(950);
+    dlg.play([{ who: 'Mission Control', text: msg, portrait: 'portrait_capcom' }], () => { dlg.destroy(); done(); });
   }
 }

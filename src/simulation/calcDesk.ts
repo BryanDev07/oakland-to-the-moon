@@ -5,7 +5,7 @@
  */
 import { cloneDesign, type Design } from '../data/mission';
 import {
-  BATTERY_MARGIN, BOOSTER_BY_ID, ENGINE_BY_ID, LB_TO_N, LIFE_SUPPORT_LB, LIGHT_MILES_PER_S, MATERIALS, MIN_LIFTOFF_TWR, MISSION_DV, MOON_G_RATIO,
+  BATTERY_MARGIN, BOOSTER_BY_ID, ENGINE_BY_ID, LB_TO_N, LIFE_SUPPORT_LB, LIGHT_MILES_PER_S, MATERIALS, MIN_LIFTOFF_TWR, MOON_G_RATIO,
   POWER_PARTS, PROPELLANTS, RocketBuild, SHIELD_REQUIRED_MPH, SIGNAL_DISTANCES,
 } from '../data/specParts';
 import { CREW_MASS_KG } from './constants';
@@ -24,6 +24,8 @@ export interface Step {
 }
 export interface Sheet {
   id: string; n: number; title: string; question: string; think: string; formula: string;
+  /** D2 Engineer level: the formula in symbols (Beginner sees `think`, Curious sees `formula`). */
+  formulaEngineer?: string;
   given: string[]; steps: Step[]; target: string; example?: string;
   /** After all steps: is the answer good for the mission, and (Easy) which part to change. */
   verdict: () => { pass: boolean; text: string; pointer?: string };
@@ -96,7 +98,7 @@ export function settledFuel(d: Design, stage: 1 | 2, startLb: number): number | 
     const S = stage === 2 ? R.stage2 : R.stage1;
     const others = R.dvTotal - (stage === 2 ? R.vStage2 : R.vStage1);
     const pushed = kgToLb(stage === 2 ? R.payloadKg + S.enginesKg : R.payloadKg + R.stage2.fullKg + S.enginesKg);
-    const r = fuelNeeded(Math.max(0, MISSION_DV.toMoon - others), S.ve, S.tankKg / Math.max(1e-9, S.fuelKg), pushed);
+    const r = fuelNeeded(Math.max(0, R.target - others), S.ve, S.tankKg / Math.max(1e-9, S.fuelKg), pushed);
     if (r.impossible) return null;
     const done = Math.abs(r.fuel - f) < 200;
     f = r.fuel;
@@ -143,7 +145,7 @@ export function buildSheets(d: Design, s: DesignStats): Sheet[] {
   const S = s.spec!, R = S.rocket, b = S.rocketBuild, sp = specOf(d);
   const e1 = ENGINE_BY_ID[b.stage1.engine], e2 = ENGINE_BY_ID[b.stage2.engine];
   const bs = b.booster && b.boosterCount > 0 ? BOOSTER_BY_ID[b.booster] : null;
-  const target = MISSION_DV.toMoon;
+  const target = s.spec!.rocket.target; // E2: 12,600 m/s to the Moon, 9,400 m/s to the ISS
   const ok = (v: boolean) => (v ? '✓' : '×');
   // weights in lb, rounded the way the desk shows them
   const payload = r0(lb(R.payloadKg));
@@ -472,7 +474,7 @@ export function resultsBoard(d: Design, s: DesignStats): { section: string; rows
     ] },
     { section: 'SPEED', rows: [
       ...R.pieces.map((p) => ({ label: `V ${p.name.toLowerCase()}`, value: `${fmt(p.dv)} m/s` })),
-      { label: `Total vs ${fmt(MISSION_DV.toMoon)}`, value: `${fmt(R.dvTotal)} m/s`, ok: R.reachesMoon },
+      { label: `Total vs ${fmt(R.target)}`, value: `${fmt(R.dvTotal)} m/s`, ok: R.reachesMoon },
       { label: 'Spare speed', value: `${R.spare >= 0 ? '+' : ''}${fmt(R.spare)} m/s`, ok: R.spare >= 0 },
     ] },
     { section: 'FUEL (YOURS VS SUGGESTED)', rows: [
