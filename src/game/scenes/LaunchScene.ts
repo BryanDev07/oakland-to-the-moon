@@ -188,8 +188,18 @@ export class LaunchScene extends Phaser.Scene {
     this.tweens.add({ targets: earth, x: -60, y: 150, duration: 6000 });
     const m = store.mission!;
     const sc = new SpacecraftView(this, 300, 110, m.design, 'flight');
-    const flame = this.add.sprite(300 - 140, 110, 'flame').setAngle(90).setOrigin(0.5, 0).play('flame').setScale(0.8, 1.6);
-    this.tweens.add({ targets: [sc, flame], x: '+=40', duration: 6000 });
+    // A8: the rocket's upper stage does this burn, so draw it docked behind the spacecraft and put the
+    // flame at ITS nozzle (the capsule's own engine stays dark)
+    const us = this.add.graphics({ x: 194, y: 110 }); // right edge meets the capsule's nozzle
+    us.fillStyle(0x1a1626).fillRect(-62, -17, 62, 34); // outline
+    us.fillStyle(0xe9e4d4).fillRect(-60, -15, 58, 30); // tank
+    us.fillStyle(0xc96a2a).fillRect(-60, -15, 10, 30); // insulation band
+    us.fillStyle(0xb9b3a2).fillRect(-60, 9, 58, 4); // shadow
+    us.fillStyle(0x8a8478).fillRect(-30, -15, 2, 30).fillRect(-14, -15, 2, 30); // panel seams
+    us.fillStyle(0x3a3a48).fillRect(-74, -8, 14, 16); // engine bell
+    us.fillStyle(0x5a5a6a).fillRect(-72, -6, 10, 12);
+    const flame = this.add.sprite(194 - 74, 110, 'flame').setAngle(90).setOrigin(0.5, 0).play('flame').setScale(0.8, 1.6);
+    this.tweens.add({ targets: [sc, us, flame], x: '+=40', duration: 6000 });
     audio.loop('rumble', 0.3);
     panel(this, 100, 196, 280, 50, 'dialog');
     txt(this, 240, 202, 'TRANS-LUNAR INJECTION', { align: 'center', color: C.gold2 });

@@ -57,6 +57,12 @@ export const NEUTRON_TARGET_H = 10;
 
 /** Feature flags (JOSEPH_SPEC rule A1.6: turn features off, don't delete them). */
 export const SPEC_MODEL = true; // capsule + staged-rocket model from JOSEPH_SPEC tab 3 / tab 6
+/**
+ * A8: the upper-stage push check (stage 2 push / starting weight >= 0.3, G) is a warning on Easy and
+ * Hard. The spec makes it blocking on Hard, but every preset is about 0.10-0.11 today (the SLS-like
+ * PART C rocket is about 0.18), so blocking stays off until the Rocket tab lets players add engines.
+ */
+export const UPPER_PUSH_BLOCKS_HARD = false;
 export const RELIABILITY_ROLLS = false; // chance-of-success rolls removed: risk comes only from emergencies
 
 export const PROGRAM = 'Pacific Space Exploration Agency (fictional)';

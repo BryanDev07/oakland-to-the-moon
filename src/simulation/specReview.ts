@@ -4,9 +4,9 @@
  * lander, budget, safety) and adds the new ones (capsule limits, docking, heat shield, data, risks).
  */
 import type { Design } from '../data/mission';
-import { MIN_LIFTOFF_TWR, MIN_THRUSTERS, MISSION_DV, SHIELD_REQUIRED_MPH } from '../data/specParts';
-import { RELIABILITY_ROLLS } from './constants';
-import { launchLocked, shieldResult } from './formulas';
+import { MIN_LIFTOFF_TWR, MIN_THRUSTERS, MIN_UPPER_TWR, MISSION_DV, SHIELD_REQUIRED_MPH } from '../data/specParts';
+import { RELIABILITY_ROLLS, UPPER_PUSH_BLOCKS_HARD } from './constants';
+import { launchLocked, shieldResult, weightN } from './formulas';
 import type { ReviewCheck } from './review';
 import type { DesignStats } from './spacecraft';
 import { fmt, fmtLb, fmtUsdM, kgToLb } from './units';
@@ -93,6 +93,19 @@ export function applySpecReview(d: Design, s: DesignStats, checks: ReviewCheck[]
     fix: dockOk ? undefined : !S.dockingOk ? 'Add the NASA Docking System and the docking lidar.' : !S.thrustersOk ? `Add thrusters (at least ${MIN_THRUSTERS.v}).` : 'Pick a thruster tank.',
     culprits: [],
   });
+
+  // ---- upper-stage push (A8): stage 2 push / its starting weight in N must be at least 0.3 (G)
+  {
+    const R = S.rocket, up = R.upperTwr, ok = up >= MIN_UPPER_TWR.v;
+    const hard = d.spec?.difficulty === 'hard';
+    checks.push({
+      id: 'upper_push', title: 'Upper-stage push', icon: 'rocket', status: ok ? 'pass' : hard && UPPER_PUSH_BLOCKS_HARD ? 'fail' : 'warn',
+      value: `${up.toFixed(2)} (needs ${MIN_UPPER_TWR.v})`,
+      detail: `Stage 2 pushes ${fmt(R.stage2.thrustN)} N against ${fmt(weightN(R.payloadKg + R.stage2.fullKg))} N of weight = ${up.toFixed(2)}.` + (ok ? '' : ' Too weak: the stage wastes fuel fighting gravity.'),
+      fix: ok ? undefined : 'Add stage 2 engines or pick a stronger stage 2 engine.',
+      culprits: [],
+    });
+  }
 
   // ---- heat shield (#14)
   const hs = shieldResult(S.shieldHealth);

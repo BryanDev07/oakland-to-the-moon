@@ -51,6 +51,8 @@ export interface StackStats {
   pieces: { name: string; fullKg: number; emptyKg: number; ve: number; dv: number }[];
   vBoosters: number; vStage1: number; vStage2: number; dvTotal: number; target: number; spare: number; reachesMoon: boolean;
   deadWeightIgnition: number; deadWeightBurnout: number; vStage2IfKept: number;
+  /** A8: stage 2 push / stage 2 starting weight (payload + full stage 2), in N / N. */
+  upperTwr: number;
   costUsd: number; costLines: { label: string; usd: number }[];
   pass: boolean;
 }
@@ -97,6 +99,7 @@ export function analyzeRocket(b: RocketBuild, payloadKg: number, fixes: FixId[] 
     deadWeightBurnout: deadWeightShare(s1.emptyKg, s1Empty),
     // What if stage 1's empty shell stayed attached during the stage-2 burn?
     vStage2IfKept: deltaV(s2.ve, s2Full + s1.emptyKg, s2Empty + s1.emptyKg),
+    upperTwr: twr(s2.thrustN, weightN(s2Full)),
     costUsd, costLines, pass: reaches && lifts,
   };
 }
