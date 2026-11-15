@@ -3,7 +3,7 @@ import { audio } from '../audio/audio';
 import { store } from '../../state/store';
 import { Button, C, crt, fadeIn, fadeTo, gearButton, H, Meter, modal, panel, toast, txt, W } from '../ui/ui';
 import * as Sim from '../../simulation/mission';
-import { abortLanding, agl, autopilot, createLanding, inSafeZone, LandingSim, makeTerrain, stepLanding, Terrain, TERRAIN_STEP, heightAt } from '../../simulation/landing';
+import { abortLanding, advanceLanding, agl, autopilot, createLanding, inSafeZone, LandingSim, LANDING_SPEEDS, makeTerrain, Terrain, TERRAIN_STEP, heightAt } from '../../simulation/landing';
 import { MOON_G } from '../../simulation/constants';
 import { massFlow } from '../../simulation/rocket';
 import { SITE_BY_ID } from '../../data/mission';
@@ -98,6 +98,13 @@ export class LandingScene extends Phaser.Scene {
     this.keys = this.input.keyboard!.addKeys('UP,DOWN,LEFT,RIGHT,W,S,A,D,SPACE,X') as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.keyboard?.on('keydown-A', () => this.started && this.setAuto(!this.auto));
     this.input.keyboard?.on('keydown-X', () => this.abort());
+    // D4: speed buttons (autopilot only) and keys 1 / 2 / 4
+    this.speed = 1; this.speedBtns = [];
+    LANDING_SPEEDS.forEach((v, i) => {
+      const b = new Button(this, W - 120 + i * 22, H - 46, `${v}x`, () => this.setSpeed(v), { w: 20, h: 18, tooltip: `Fast-forward the autopilot ${v}x (key ${v})` }).setScrollFactor(0) as Button;
+      b.setVisible(false); this.speedBtns.push(b);
+    });
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => { if (!this.started || this.finished || !this.auto) return; const v = Number(e.key); if (v === 1 || v === 2 || v === 4) this.setSpeed(v); });
     gearButton(this);
     crt(this);
     this.place();
@@ -158,8 +165,17 @@ export class LandingScene extends Phaser.Scene {
 
   setAuto(v: boolean) {
     this.auto = v;
+    if (!v) this.setSpeed(1); // switching to manual drops back to 1x
+    this.speedBtns.forEach((b) => b.setVisible(v));
     this.autoBtn.setSelected(v).setText(v ? 'AUTO: ON' : 'AUTOPILOT');
     audio.sfx(v ? 'beep' : 'move');
+  }
+
+  speed = 1;
+  speedBtns: Button[] = [];
+  setSpeed(v: number) {
+    this.speed = this.auto ? v : 1;
+    this.speedBtns.forEach((b, i) => b.setSelected(LANDING_SPEEDS[i] === this.speed));
   }
 
   abort() {
@@ -185,13 +201,13 @@ export class LandingScene extends Phaser.Scene {
     if (k.DOWN.isDown || k.S.isDown) this.cmd.throttle = Math.max(0, this.cmd.throttle - 0.9 * dt);
     const full = k.SPACE.isDown || this.hold.up;
     this.cmd.tilt = (k.LEFT.isDown || this.hold.left ? -1 : 0) + (k.RIGHT.isDown || k.D.isDown || this.hold.right ? 1 : 0);
-    this.acc += dt;
-    while (this.acc >= 1 / 30 && !L.done) {
+    // D4: autopilot can fast-forward (fixed 1/30 s physics steps at every speed); manual is always 1x
+    const speed = this.auto ? this.speed : 1;
+    this.acc = advanceLanding(L, T, this.acc, dt, speed, () => {
       const inp = this.auto ? autopilot(L, T) : { throttle: full ? 1 : this.cmd.throttle, tilt: this.cmd.tilt };
       if (this.auto) this.cmd.throttle = inp.throttle;
-      stepLanding(L, T, inp);
-      this.acc -= 1 / 30;
-    }
+      return inp;
+    });
     this.place();
     const h = agl(L, T);
     this.flame.setVisible(L.propKg > 0 && L.throttle > 0.03).setScale(0.35 + L.throttle * 0.4, 0.3 + L.throttle * 0.9);
@@ -210,7 +226,7 @@ export class LandingScene extends Phaser.Scene {
     const vs = L.vy, hs = L.vx;
     const hoverS = L.propKg / massFlow(L.massKg * MOON_G, L.ispS);
     const vsWarn = vs < -Math.max(3, h * 0.15) ? ' !' : '';
-    this.hud.setText(`ALT ${h.toFixed(0).padStart(4)} m\nV/S ${vs.toFixed(1).padStart(5)} m/s${vsWarn}\nH/S ${hs.toFixed(1).padStart(5)} m/s\n${this.auto ? 'AUTOPILOT' : 'MANUAL'}  ${L.trn ? 'TRN: ON' : 'TRN: N/A'}`);
+    this.hud.setText(`ALT ${h.toFixed(0).padStart(4)} m\nV/S ${vs.toFixed(1).padStart(5)} m/s${vsWarn}\nH/S ${hs.toFixed(1).padStart(5)} m/s\n${this.auto ? `AUTOPILOT ${this.speed}x` : 'MANUAL'}  ${L.trn ? 'TRN: ON' : 'TRN: N/A'}`);
     this.fuel.set(L.propKg / Math.max(1, L.propStartKg), `${fmtLb(L.propKg)} · ${Math.round(hoverS)} s`); // descent fuel in lb
     this.thr.set(L.throttle, `${Math.round(L.throttle * 100)}%`, C.blue);
     // call-outs
