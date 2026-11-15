@@ -50,16 +50,18 @@ export function buildFiveSheets(d: Design, s: DesignStats): Sheet[] {
       ...twr.steps.map(toGame),
       g('Stage 2 push', R.stage2.thrustN, 'N', 'Stage 2 lights after stage 1 drops away.'),
       g('Stage 2 starting weight', s2StartN, 'N', 'Your spacecraft plus a full stage 2, in newtons.'),
-      g('Stage 2 push / weight', R.upperTwr, '', upOk ? 'Strong enough to keep climbing.' : 'Too weak: the stage wastes fuel fighting gravity.', 0.01),
+      g('Stage 2 push / weight', R.upperTwr, '', upOk ? 'Strong enough to keep climbing.' : d.spec?.rocket ? 'Too weak: the stage wastes fuel fighting gravity.' : 'Under 0.3: a real stage loses a little fuel to gravity. The game leaves that out.', 0.01),
     ],
     target: `Thrust-to-weight 1.2+ at liftoff; stage 2 at ${MIN_UPPER_TWR.v}+.`,
     example: liftoff.example,
     verdict: () => {
       const t = twr.verdict();
       if (!t.pass) return { pass: false, text: `FAIL: ${t.text}`, pointer: t.pointer };
-      return upOk
-        ? { pass: true, text: `PASS: ${R.twr.toFixed(2)} at liftoff, stage 2 at ${R.upperTwr.toFixed(2)}.` }
-        : { pass: true, text: `PASS, with a warning: stage 2 is only ${R.upperTwr.toFixed(2)} (needs ${MIN_UPPER_TWR.v}): it wastes fuel fighting gravity.`, pointer: 'Add stage 2 engines or pick a stronger one.' };
+      if (upOk) return { pass: true, text: `PASS: ${R.twr.toFixed(2)} at liftoff, stage 2 at ${R.upperTwr.toFixed(2)}.` };
+      // custom rockets can add stage 2 engines; presets cannot, and the game does not charge the loss
+      return d.spec?.rocket
+        ? { pass: true, text: `PASS, with a warning: stage 2 is only ${R.upperTwr.toFixed(2)} (needs ${MIN_UPPER_TWR.v}): it wastes fuel fighting gravity.`, pointer: 'Add stage 2 engines or pick a stronger one.' }
+        : { pass: true, text: `PASS: ${R.twr.toFixed(2)} at liftoff. Stage 2 is ${R.upperTwr.toFixed(2)}, under the ${MIN_UPPER_TWR.v} rule of thumb; the game leaves that small loss out.` };
     },
   };
 

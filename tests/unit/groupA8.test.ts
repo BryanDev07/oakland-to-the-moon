@@ -12,10 +12,22 @@ describe('A8 physics and consistency', () => {
     const s = analyzeDesign(REFERENCE_DESIGN);
     const R = s.spec!.rocket;
     expect(R.upperTwr).toBeCloseTo(R.stage2.thrustN / ((R.payloadKg + R.stage2.fullKg) * 9.80665), 6);
+    // a preset rocket: the player cannot change its stage 2 and the game charges no extra loss,
+    // so the ratio is shown for learning without a warning
     const c = reviewDesign(REFERENCE_DESIGN).checks.find((x) => x.id === 'upper_push')!;
     expect(R.upperTwr).toBeLessThan(0.3);
+    expect(c.status).toBe('pass');
+    expect(c.value).toMatch(/info/);
+    expect(c.detail).toMatch(/rule of thumb/);
+  });
+  it('a custom rocket with a weak stage 2 still warns (the player can add engines)', () => {
+    const d = cloneDesign(REFERENCE_DESIGN);
+    const preset = analyzeDesign(d).spec!.rocketBuild;
+    d.spec = { ...d.spec, rocket: { ...JSON.parse(JSON.stringify(preset)), name: 'Custom (test)' } };
+    const c = reviewDesign(d).checks.find((x) => x.id === 'upper_push')!;
     expect(c.status).toBe('warn'); // warning (Hard blocking is behind UPPER_PUSH_BLOCKS_HARD)
     expect(c.detail).toMatch(/Too weak: the stage wastes fuel fighting gravity/);
+    expect(c.fix).toMatch(/stage 2 engines/);
   });
   it('the leak card\'s oxygen days are oxygen / (crew x 2.0 + leak)', () => {
     const m = createMission(cloneDesign(REFERENCE_DESIGN), 221);

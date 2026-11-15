@@ -97,15 +97,24 @@ export function applySpecReview(d: Design, s: DesignStats, checks: ReviewCheck[]
     culprits: [],
   });
 
-  // ---- upper-stage push (A8): stage 2 push / its starting weight in N must be at least 0.3 (G)
+  // ---- upper-stage push (A8): stage 2 push / its starting weight in N, rule of thumb 0.3 (G)
+  // The 12,600 m/s target already includes typical gravity losses and the game does not charge a
+  // weak upper stage any extra loss, so this is a design lesson, not a safety check. Every preset
+  // is about 0.10-0.11 and the player cannot change a preset's stage 2, so presets get an
+  // informational pass; a custom rocket (Rocket tab) can add stage 2 engines, so it still warns.
   {
     const R = S.rocket, up = R.upperTwr, ok = up >= MIN_UPPER_TWR.v;
     const hard = d.spec?.difficulty === 'hard';
+    const custom = !!d.spec?.rocket;
+    const base = `Stage 2 pushes ${fmt(R.stage2.thrustN)} N against ${fmt(weightN(R.payloadKg + R.stage2.fullKg))} N of weight = ${up.toFixed(2)}.`;
     checks.push({
-      id: 'upper_push', title: 'Upper-stage push', icon: 'rocket', status: ok ? 'pass' : hard && UPPER_PUSH_BLOCKS_HARD ? 'fail' : 'warn',
-      value: `${up.toFixed(2)} (needs ${MIN_UPPER_TWR.v})`,
-      detail: `Stage 2 pushes ${fmt(R.stage2.thrustN)} N against ${fmt(weightN(R.payloadKg + R.stage2.fullKg))} N of weight = ${up.toFixed(2)}.` + (ok ? '' : ' Too weak: the stage wastes fuel fighting gravity.'),
-      fix: ok ? undefined : 'Add stage 2 engines or pick a stronger stage 2 engine.',
+      id: 'upper_push', title: 'Upper-stage push', icon: 'rocket',
+      status: ok || !custom ? 'pass' : hard && UPPER_PUSH_BLOCKS_HARD ? 'fail' : 'warn',
+      value: ok ? `${up.toFixed(2)} (aim ${MIN_UPPER_TWR.v}+)` : custom ? `${up.toFixed(2)} (needs ${MIN_UPPER_TWR.v})` : `${up.toFixed(2)} (info)`,
+      detail: base + (ok ? ''
+        : custom ? ' Too weak: the stage wastes fuel fighting gravity.'
+        : ` For learning: below the ${MIN_UPPER_TWR.v} rule of thumb, so a real stage would lose some fuel fighting gravity. This game leaves that loss out (the 12,600 m/s target already counts typical losses), so it does not affect your mission. Build a custom rocket in the Rocket tab to raise it.`),
+      fix: ok || !custom ? undefined : 'Add stage 2 engines or pick a stronger stage 2 engine.',
       culprits: [],
     });
   }
